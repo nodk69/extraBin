@@ -1,0 +1,368 @@
+/* Palette pulled from CreatePastePage: ink #17201d, coral #ff5c3d, paper line #d5d0c5 */
+.pp-sel, .pp-sel__pop {
+  --s-ink: #17201d;
+  --s-bg: #fffdf8;
+  --s-line: #d5d0c5;
+  --s-muted: #74786f;
+  --s-hover: #f3efe4;
+  --s-accent: #ff5c3d;
+  --s-ring: rgba(255, 92, 61, .22);
+  --s-pop-shadow: 0 4px 6px -1px rgba(23, 32, 29, 0.08), 0 16px 36px -10px rgba(23, 32, 29, 0.28);
+}
+
+.pp-sel--dark, .pp-sel__pop.pp-sel--dark {
+  --s-ink: #f4f1e9;
+  --s-bg: #1a2320;
+  --s-line: #2c3733;
+  --s-muted: #8d9189;
+  --s-hover: #243029;
+  --s-accent: #ff5c3d;
+  --s-ring: rgba(255, 92, 61, .28);
+  --s-pop-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 20px 44px -10px rgba(0, 0, 0, 0.7);
+}
+
+.pp-sel {
+  position: relative;
+  width: 100%;
+}
+
+.pp-sel--dark.pp-sel--sm {
+  width: auto;
+}
+
+/* ── Trigger ─────────────────────────────── */
+.pp-sel__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px 0 12px;
+  background: var(--s-bg);
+  color: var(--s-ink);
+  border: 1.5px solid var(--s-line);
+  border-radius: 10px;
+  font: 600 13px/1 inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  user-select: none;
+}
+
+.pp-sel--sm .pp-sel__trigger {
+  height: 30px;
+  padding: 0 8px 0 10px;
+  font-size: 11.5px;
+  border-radius: 7px;
+}
+
+/* In the dark editor top bar, make the trigger blend cleanly with terminal styling */
+.pp-sel--dark.pp-sel--sm .pp-sel__trigger {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #a6aea9;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.pp-sel--dark.pp-sel--sm .pp-sel__trigger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #f4f1e9;
+}
+
+.pp-sel__trigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--s-ink) 38%, var(--s-line));
+}
+
+.pp-sel__trigger:focus-visible,
+.pp-sel__trigger[data-open="true"] {
+  outline: none;
+  border-color: var(--s-ink);
+  box-shadow: 0 0 0 3px var(--s-ring);
+}
+
+.pp-sel--dark .pp-sel__trigger:focus-visible,
+.pp-sel--dark .pp-sel__trigger[data-open="true"] {
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px var(--s-ring);
+}
+
+.pp-sel__trigger:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.pp-sel__value {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pp-sel__value.is-placeholder {
+  color: var(--s-muted);
+  font-weight: 500;
+}
+
+.pp-sel__hint {
+  flex: none;
+  font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--s-muted);
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--s-ink) 6%, transparent);
+}
+
+.pp-sel__chev {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--s-muted);
+  transition: transform .28s cubic-bezier(.3,1.5,.5,1), color .15s ease;
+}
+
+.pp-sel__trigger[data-open="true"] .pp-sel__chev {
+  transform: rotate(180deg);
+  color: var(--s-ink);
+}
+
+.pp-sel--dark .pp-sel__trigger[data-open="true"] .pp-sel__chev {
+  color: #f4f1e9;
+}
+
+/* ── Popover (portaled to <body>) ─────────── */
+.pp-sel__pop {
+  position: fixed;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  background: var(--s-bg);
+  color: var(--s-ink);
+  border: 1.5px solid var(--s-ink);
+  border-radius: 12px;
+  box-shadow: var(--s-pop-shadow);
+  overflow: hidden;
+  font-family: inherit;
+  transform-origin: top center;
+  animation: pp-sel-in .18s cubic-bezier(.3,1.25,.5,1) both;
+  box-sizing: border-box;
+}
+
+.pp-sel--dark.pp-sel__pop {
+  border-color: var(--s-line);
+}
+
+.pp-sel__pop[data-flip="true"] {
+  transform-origin: bottom center;
+  animation-name: pp-sel-in-up;
+}
+
+@keyframes pp-sel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(.97);
+  }
+}
+
+@keyframes pp-sel-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(.97);
+  }
+}
+
+.pp-sel__search {
+  flex: none;
+  padding: 8px 8px 4px;
+}
+
+.pp-sel__search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1.5px solid var(--s-line);
+  background: transparent;
+  color: var(--s-ink);
+  font: 500 12.5px/1 inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.pp-sel__search input::placeholder {
+  color: var(--s-muted);
+}
+
+.pp-sel__search input:focus {
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px var(--s-ring);
+}
+
+.pp-sel__list {
+  list-style: none;
+  margin: 0;
+  padding: 5px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: var(--s-line) transparent;
+}
+
+.pp-sel__list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.pp-sel__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pp-sel__list::-webkit-scrollbar-thumb {
+  background: var(--s-line);
+  border-radius: 4px;
+}
+
+.pp-sel__opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  min-height: 38px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+  transition: background-color .1s ease;
+}
+
+.pp-sel__opt[data-active="true"] {
+  background: var(--s-hover);
+}
+
+.pp-sel__opt[aria-selected="true"] {
+  font-weight: 700;
+}
+
+/* coral marker on the selected row */
+.pp-sel__opt[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--s-accent);
+}
+
+.pp-sel__opt[aria-disabled="true"] {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.pp-sel__opt-icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  color: var(--s-muted);
+}
+
+.pp-sel__opt[aria-selected="true"] .pp-sel__opt-icon {
+  color: var(--s-accent);
+}
+
+.pp-sel__txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.pp-sel__label {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--s-ink);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.pp-sel__desc {
+  font: 400 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--s-muted);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.pp-sel__check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  color: var(--s-accent);
+  opacity: 0;
+  transform: scale(.5) rotate(-12deg);
+  transition: opacity .15s ease, transform .25s cubic-bezier(.3,1.7,.5,1);
+}
+
+.pp-sel__opt[aria-selected="true"] .pp-sel__check {
+  opacity: 1;
+  transform: none;
+}
+
+.pp-sel__empty {
+  padding: 18px 10px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--s-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-sel__pop, .pp-sel__chev, .pp-sel__check {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Mono typography styling when font-mono is used on Select */
+.pp-sel.font-mono .pp-sel__trigger,
+.pp-sel.font-mono .pp-sel__value,
+.pp-sel.font-mono .pp-sel__value span,
+.pp-sel__trigger.font-mono {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pp-sel__pop--mono,
+.pp-sel__pop--mono .pp-sel__search input,
+.pp-sel__pop--mono .pp-sel__opt,
+.pp-sel__pop--mono .pp-sel__label,
+.pp-sel__pop--mono .pp-sel__empty {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.pp-sel__pop--mono .pp-sel__label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pp-sel__pop--mono .pp-sel__desc {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+}
+

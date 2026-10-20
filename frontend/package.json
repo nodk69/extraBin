@@ -1,0 +1,51 @@
+{
+  "name": "pastebin-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "@sentry/react": "^8.33.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/prismjs": "^1.26.6",
+    "@types/qrcode": "^1.5.6",
+    "axios": "^1.7.7",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "diff": "^7.0.0",
+    "framer-motion": "^14.3.0",
+    "lucide-react": "^0.446.0",
+    "prismjs": "^1.30.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.26.2",
+    "remark-gfm": "^4.0.1",
+    "shiki": "^4.5.0",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/react": "^16.0.1",
+    "@types/diff": "^7.0.2",
+    "@types/react": "^18.3.9",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.1"
+  }
+}

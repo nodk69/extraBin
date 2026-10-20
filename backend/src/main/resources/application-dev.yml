@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:pastebindb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
+  jpa:
+    database-platform: ${JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+    show-sql: true
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    clean-disabled: false
+
+logging:
+  level:
+    com.pastebin: DEBUG
+    org.springframework.security: INFO
+    org.flywaydb: INFO

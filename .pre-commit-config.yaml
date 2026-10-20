@@ -1,0 +1,13 @@
+# Pre-commit hook configuration for secret scanning.
+# Install: pip install pre-commit && pre-commit install
+# Manual run: pre-commit run --all-files
+#
+# Gitleaks detects hardcoded secrets (API keys, tokens, passwords) before they
+# enter version control. Configuration below uses the default gitleaks ruleset
+# which covers AWS, GCP, GitHub, GitLab, Slack, Stripe, Twilio, and 100+ more.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

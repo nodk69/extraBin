@@ -1,0 +1,45 @@
+# Dependencies (rebuilt inside container via npm ci)
+node_modules
+
+# Build output (produced inside container via npm run build)
+dist
+
+# Version control
+.git
+.gitignore
+
+# Test artifacts
+coverage
+playwright-report
+test-results
+
+# Environment files — NEVER leak host secrets into the image
+.env
+.env.local
+.env.*.local
+.env.example
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in the runtime image)
+docs
+*.md
+LICENSE
+
+# CI configuration
+.github
+
+# Debug / log files
+*.log
+npm-debug.log*
+
+# Qoder / agent artifacts
+.qoder

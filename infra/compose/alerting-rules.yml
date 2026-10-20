@@ -1,0 +1,136 @@
+# Prometheus alerting rules for ExtraBin production monitoring.
+# Loaded by prometheus.yml via rule_files directive.
+#
+# These alerts cover the critical failure modes of a single-instance deployment:
+# service availability, error rates, database connectivity, and background job health.
+# Alertmanager integration is out of scope (no alertmanager configured); these rules
+# surface as firing alerts in the Prometheus UI at http://localhost:9090/alerts.
+
+groups:
+  - name: pastebin-service-availability
+    rules:
+      # Backend process is down or unreachable.
+      # Fires when Prometheus cannot scrape the backend for 1 minute.
+      - alert: BackendDown
+        expr: up{job="pastebin-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend service is down"
+          description: "Prometheus cannot scrape pastebin-backend for over 1 minute. The backend container may have crashed or become unresponsive."
+
+      # Readiness probe is failing — the app is running but cannot serve traffic.
+      # Typically indicates a database connection failure.
+      - alert: ReadinessFailing
+        expr: spring_health_readiness_status{status="down"} == 1 or spring_health_readiness_status{status="out-of-service"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend readiness probe is failing"
+          description: "The backend readiness probe reports DOWN or OUT_OF_SERVICE for over 2 minutes. The application is likely unable to connect to PostgreSQL."
+
+  - name: pastebin-error-rates
+    rules:
+      # High rate of HTTP 5xx errors — indicates application-level failures.
+      # Fires when more than 5% of requests in the last 5 minutes return 5xx.
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            /
+            sum(rate(http_server_requests_seconds_count[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "More than 5% of HTTP requests are returning 5xx errors over the last 5 minutes. Current rate: {{ $value | humanizePercentage }}."
+
+      # Sustained high error rate — escalated to critical after 15 minutes.
+      - alert: SustainedHighErrorRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            /
+            sum(rate(http_server_requests_seconds_count[5m]))
+          ) > 0.10
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sustained high HTTP 5xx error rate"
+          description: "More than 10% of HTTP requests are returning 5xx errors for over 15 minutes. Current rate: {{ $value | humanizePercentage }}."
+
+  - name: pastebin-database
+    rules:
+      # HikariCP connection pool is exhausted — no idle connections available.
+      # Indicates the application is saturating its database connection pool.
+      - alert: DatabaseConnectionPoolExhausted
+        expr: hikaricp_connections_idle{pool="HikariPool-1"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool has no idle connections"
+          description: "The HikariCP connection pool has zero idle connections for over 2 minutes. Active connections: {{ $value }}. The application may be experiencing slow queries or connection leaks."
+
+      # HikariCP is actively waiting for connections — pool is fully saturated.
+      - alert: DatabaseConnectionPoolPending
+        expr: hikaricp_connections_pending{pool="HikariPool-1"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool is saturated"
+          description: "Requests are waiting for database connections for over 1 minute. The pool (max 20) is fully exhausted. Active: {{ $value }} pending requests."
+
+  - name: pastebin-background-jobs
+    rules:
+      # Cleanup scheduler has not run recently — indicates scheduler thread death
+      # or the application has been down without Prometheus detecting it.
+      # The cleanup runs every 5 minutes; alert if no runs in 20 minutes.
+      - alert: CleanupSchedulerStale
+        expr: |
+          time() - pastes_expired_purged_total_timestamp > 1200
+          or
+          absent(pastes_expired_purged_total)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Expired paste cleanup scheduler has not run"
+          description: "The expiration cleanup scheduler has not executed in over 20 minutes. Expired pastes are accumulating in the database."
+
+  - name: pastebin-resource-pressure
+    rules:
+      # JVM heap usage is approaching the container memory limit.
+      # Fires when heap usage exceeds 85% of the maximum heap.
+      - alert: HighHeapUsage
+        expr: |
+          jvm_memory_used_bytes{area="heap"}
+          /
+          jvm_memory_max_bytes{area="heap"}
+          > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM heap usage is above 85%"
+          description: "JVM heap usage is at {{ $value | humanizePercentage }} of maximum. The container may be at risk of OOM kill if memory pressure continues."
+
+      # Disk space on the Prometheus data volume is running low.
+      - alert: PrometheusDiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{mountpoint="/prometheus"}
+          /
+          node_filesystem_size_bytes{mountpoint="/prometheus"}
+          < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus disk space is below 10%"
+          description: "Less than 10% disk space remaining on the Prometheus data volume. Metrics may be lost if the volume fills up."

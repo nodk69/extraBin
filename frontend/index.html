@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>extraBin - Secure Source Code & Text Sharing</title>
+    <meta name="description" content="Production-grade, secure, fast text and source code sharing platform with syntax highlighting, granular privacy, and expiration." />
+    <meta name="referrer" content="no-referrer" />
+    <!-- Design Fonts: DM Sans & IBM Plex Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Ko-fi Floating Chat Overlay Widget -->
+    <script src="https://storage.ko-fi.com/cdn/scripts/overlay-widget.js"></script>
+    <script>
+      function initKoFiWidget() {
+        if (typeof kofiWidgetOverlay !== 'undefined') {
+          try {
+            kofiWidgetOverlay.draw('nodk69', {
+              'type': 'floating-chat',
+              'floating-chat.donateButton.text': 'Support me',
+              'floating-chat.donateButton.background-color': '#794bc4',
+              'floating-chat.donateButton.text-color': '#fff'
+            });
+          } catch (e) {
+            console.warn('Ko-fi widget initialization error:', e);
+          }
+        } else {
+          setTimeout(initKoFiWidget, 150);
+        }
+      }
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initKoFiWidget();
+      } else {
+        window.addEventListener('DOMContentLoaded', initKoFiWidget);
+      }
+    </script>
+  </body>
+</html>

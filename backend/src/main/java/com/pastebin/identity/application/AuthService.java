@@ -1,0 +1,476 @@
+package com.pastebin.identity.application;
+
+import com.pastebin.identity.api.dto.*;
+import com.pastebin.identity.domain.PasswordResetToken;
+import com.pastebin.identity.domain.User;
+import com.pastebin.identity.infrastructure.PasswordResetTokenRepository;
+import com.pastebin.identity.infrastructure.PastebinUserPrincipal;
+import com.pastebin.identity.infrastructure.UserRepository;
+import com.pastebin.paste.domain.DeletionCapabilityUtil;
+import com.pastebin.shared.errors.ConflictException;
+import com.pastebin.shared.errors.ForbiddenException;
+import com.pastebin.shared.errors.UnauthorizedException;
+import com.pastebin.shared.security.RateLimiterService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.context.SecurityContextHolderStrategy;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
+import org.springframework.beans.factory.annotation.Value;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
+    @Value("${supabase.url:}")
+    private String supabaseUrl;
+
+    @Value("${supabase.anon-key:}")
+    private String supabaseAnonKey;
+
+    @Value("${supabase.service-role-key:}")
+    private String supabaseServiceRoleKey;
+
+    @Value("${server.servlet.session.cookie.secure:false}")
+    private boolean sessionSecure;
+
+    @Value("${server.servlet.session.cookie.same-site:lax}")
+    private String sessionSameSite;
+
+    private final UserRepository userRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+    private final RateLimiterService rateLimiterService;
+    private final com.pastebin.shared.security.ClientIpResolver clientIpResolver;
+    private final UserSessionVersionService userSessionVersionService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+    private final SecurityContextHolderStrategy securityContextHolderStrategy = SecurityContextHolder.getContextHolderStrategy();
+
+    public AuthService(UserRepository userRepository,
+                       PasswordResetTokenRepository passwordResetTokenRepository,
+                       PasswordEncoder passwordEncoder,
+                       AuthenticationManager authenticationManager,
+                       RateLimiterService rateLimiterService,
+                       com.pastebin.shared.security.ClientIpResolver clientIpResolver,
+                       UserSessionVersionService userSessionVersionService) {
+        this.userRepository = userRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.authenticationManager = authenticationManager;
+        this.rateLimiterService = rateLimiterService;
+        this.clientIpResolver = clientIpResolver;
+        this.userSessionVersionService = userSessionVersionService;
+    }
+
+    @Transactional
+    public UserResponse register(RegisterRequest request) {
+        return register(request, null);
+    }
+
+    @Transactional
+    public UserResponse register(RegisterRequest request, String clientIp) {
+        if (clientIp != null && !clientIp.isBlank()) {
+            rateLimiterService.checkRateLimit("register:ip:" + clientIp, 5, 600);
+        }
+
+        assertPasswordByteLimit(request.password());
+
+        if (userRepository.existsByUsername(request.username())) {
+            throw new ConflictException("Username is already taken.");
+        }
+        if (userRepository.existsByEmail(request.email().toLowerCase().trim())) {
+            throw new ConflictException("Email is already registered.");
+        }
+
+        User user = new User(
+                request.username().trim(),
+                request.email(),
+                passwordEncoder.encode(request.password()),
+                "ROLE_USER"
+        );
+
+        userRepository.save(user);
+
+        return toUserResponse(user);
+    }
+
+    public UserResponse login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        String clientIp = clientIpResolver.resolveClientIp(httpRequest);
+        rateLimiterService.checkRateLimit("login:ip:" + clientIp, 10, 60);
+
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.usernameOrEmail(), request.password())
+            );
+
+            SecurityContext context = securityContextHolderStrategy.createEmptyContext();
+            context.setAuthentication(authentication);
+            securityContextHolderStrategy.setContext(context);
+            securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+            PastebinUserPrincipal principal = (PastebinUserPrincipal) authentication.getPrincipal();
+            User user = userRepository.findById(principal.getId())
+                    .orElseThrow(() -> new UnauthorizedException("User not found"));
+
+            return toUserResponse(user);
+        } catch (BadCredentialsException e) {
+            throw new UnauthorizedException("Invalid username or password.");
+        }
+    }
+
+    public void logout(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        SecurityContext context = securityContextHolderStrategy.getContext();
+        context.setAuthentication(null);
+        securityContextHolderStrategy.clearContext();
+        securityContextRepository.saveContext(context, httpRequest, httpResponse);
+        if (httpRequest.getSession(false) != null) {
+            httpRequest.getSession().invalidate();
+        }
+
+        // Explicitly clear PASTESESSIONID cookie in response to prevent zombie sessions
+        org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from("PASTESESSIONID", "")
+                .maxAge(0)
+                .httpOnly(true)
+                .path("/")
+                .secure(sessionSecure)
+                .sameSite(sessionSameSite)
+                .build();
+        httpResponse.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    @Transactional
+    public String requestPasswordReset(PasswordResetRequest request, String clientIp) {
+        rateLimiterService.checkRateLimit("pwd_reset:ip:" + clientIp, 5, 900);
+
+        userRepository.findByEmail(request.email().toLowerCase().trim()).ifPresent(user -> {
+            // P1-13: invalidate ALL outstanding tokens for the user when a new one is issued.
+            passwordResetTokenRepository.deleteByUserId(user.getId());
+
+            String rawToken = DeletionCapabilityUtil.generateCapability();
+            String tokenHash = DeletionCapabilityUtil.hashCapability(rawToken);
+            Instant expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES);
+
+            PasswordResetToken resetToken = new PasswordResetToken(user.getId(), tokenHash, expiresAt);
+            passwordResetTokenRepository.save(resetToken);
+        });
+
+        // Always return generic response to prevent account enumeration
+        return "If the account exists, password reset instructions have been dispatched.";
+    }
+
+    @Transactional
+    public void confirmPasswordReset(PasswordResetConfirmRequest request) {
+        assertPasswordByteLimit(request.newPassword());
+        String tokenHash = DeletionCapabilityUtil.hashCapability(request.token());
+
+        // P1-13: pessimistic row lock so a concurrent confirmation with the same token
+        // cannot race past the validity check and double-use the token.
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHashForUpdate(tokenHash)
+                .orElseThrow(() -> new ForbiddenException("Password reset token is invalid or has expired."));
+
+        if (!resetToken.isValid(Instant.now())) {
+            throw new ForbiddenException("Password reset token is invalid or has expired.");
+        }
+
+        User user = userRepository.findById(resetToken.getUserId())
+                .orElseThrow(() -> new ForbiddenException("Associated user not found."));
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+
+        // Sync new password to Supabase if configured so frontend sign-in doesn't lock out the user
+        syncPasswordToSupabaseIfConfigured(user.getEmail(), request.newPassword());
+
+        userSessionVersionService.update(user.getId(), user.getSessionVersion());
+        userSessionVersionService.invalidate(user.getId());
+
+        // P1-13: after a successful reset, remove every outstanding token for the user —
+        // including older, not-yet-consumed tokens (they must not remain usable). Do NOT
+        // re-save `resetToken` afterwards: its row is already gone (deleting it is the
+        // stronger, equivalent-of-consumed state) and re-saving would resurrect it.
+        passwordResetTokenRepository.deleteByUserId(user.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse getCurrentUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Authentication required"));
+        return toUserResponse(user);
+    }
+
+    public UserResponse toUserResponse(User user) {
+        return new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRole(),
+                user.isEmailVerified(),
+                user.getCreatedAt()
+        );
+    }
+
+    /**
+     * P1-14: BCrypt's secret-size input is 72 bytes; longer inputs are truncated (or, on
+     * some library paths, rejected). A password of 128 characters may be far more than
+     * 72 UTF-8 bytes, silently collapsing different passwords onto the same hash prefix.
+     * Enforcing the real bcrypt limit keeps "valid" passwords honest; the request DTO's
+     * character-based range (8..128) alone is not sufficient.
+     */
+    private void assertPasswordByteLimit(String password) {
+        if (password == null) {
+            return;
+        }
+        int bytes = password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        if (bytes > 72) {
+            throw new com.pastebin.shared.errors.BadRequestException(
+                    "Password must be at most 72 bytes. Note: accented or non-Latin characters count as multiple bytes.");
+        }
+    }
+
+    public void supabaseSignUp(RegisterRequest request) {
+        supabaseSignUp(request, null);
+    }
+
+    public void supabaseSignUp(RegisterRequest request, String clientIp) {
+        if (clientIp != null && !clientIp.isBlank()) {
+            rateLimiterService.checkRateLimit("supabase-signup:ip:" + clientIp, 5, 600);
+        }
+
+        assertPasswordByteLimit(request.password());
+
+        if (supabaseUrl.isBlank() || supabaseServiceRoleKey.isBlank()) {
+            throw new ConflictException("Supabase is not configured on this server.");
+        }
+        try {
+            Map<String, Object> body = Map.of(
+                    "email", request.email().trim(),
+                    "password", request.password(),
+                    "email_confirm", true,
+                    "user_metadata", Map.of("username", request.username().trim())
+            );
+            String json = objectMapper.writeValueAsString(body);
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(supabaseUrl + "/auth/v1/admin/users"))
+                    .header("apikey", supabaseServiceRoleKey)
+                    .header("Authorization", "Bearer " + supabaseServiceRoleKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .timeout(Duration.ofSeconds(10))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400 && response.statusCode() != 422) {
+                try {
+                    com.fasterxml.jackson.databind.JsonNode errNode = objectMapper.readTree(response.body());
+                    String msg = errNode.path("msg").asText(errNode.path("message").asText("upstream error"));
+                    // P1-19: upstream messages may echo attacker-controlled input (e.g. the
+                    // submitted email). Log the detail server-side, return a generic detail.
+                    log.warn("Supabase admin user provisioning returned {}: {}", response.statusCode(), msg);
+                } catch (Exception ex) {
+                    log.warn("Supabase admin user provisioning returned unparseable response: {}", response.statusCode());
+                }
+                throw new ConflictException("Failed to register user in Supabase.");
+            }
+        } catch (ConflictException ce) {
+            throw ce;
+        } catch (Exception e) {
+            log.error("Supabase admin user provisioning failed", e);
+            throw new ConflictException("Failed to register user in Supabase.");
+        }
+
+        userRepository.findByEmail(request.email().toLowerCase().trim()).orElseGet(() -> {
+            String safeUsername = resolveUniqueUsername(request.username().trim());
+            User user = new User(
+                    safeUsername,
+                    request.email().toLowerCase().trim(),
+                    passwordEncoder.encode(request.password()),
+                    "ROLE_USER"
+            );
+            user.setEmailVerified(true);
+            return userRepository.save(user);
+        });
+    }
+
+    @Transactional
+    public UserResponse syncSupabaseUser(String accessToken,
+                                         HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        String clientIp = clientIpResolver.resolveClientIp(httpRequest);
+        rateLimiterService.checkRateLimit("supabase-sync:ip:" + clientIp, 20, 60);
+
+        SupabaseIdentity identity = verifySupabaseAccessToken(accessToken);
+
+        User user;
+        try {
+            user = userRepository.findByEmail(identity.email()).orElseGet(() -> {
+                String base = identity.username() != null ? identity.username() : identity.email().split("@")[0];
+                String safeUsername = resolveUniqueUsername(base);
+                User newUser = new User(
+                        safeUsername,
+                        identity.email(),
+                        passwordEncoder.encode(UUID.randomUUID().toString()),
+                        "ROLE_USER"
+                );
+                newUser.setEmailVerified(true);
+                return userRepository.save(newUser);
+            });
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            log.warn("Concurrent OAuth user insertion detected for email: {}. Fetching existing record.", identity.email());
+            user = userRepository.findByEmail(identity.email())
+                    .orElseThrow(() -> new UnauthorizedException("Unable to synchronize user session"));
+        }
+
+        PastebinUserPrincipal principal = new PastebinUserPrincipal(user);
+        Authentication auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        SecurityContext context = securityContextHolderStrategy.createEmptyContext();
+        context.setAuthentication(auth);
+        securityContextHolderStrategy.setContext(context);
+        securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+        return toUserResponse(user);
+    }
+
+    private void syncPasswordToSupabaseIfConfigured(String email, String newPassword) {
+        if (supabaseUrl == null || supabaseUrl.isBlank() || supabaseServiceRoleKey == null || supabaseServiceRoleKey.isBlank()) {
+            return;
+        }
+        try {
+            HttpRequest findUserReq = HttpRequest.newBuilder()
+                    .uri(URI.create(supabaseUrl + "/auth/v1/admin/users?page=1&per_page=50"))
+                    .header("apikey", supabaseServiceRoleKey)
+                    .header("Authorization", "Bearer " + supabaseServiceRoleKey)
+                    .GET()
+                    .timeout(Duration.ofSeconds(5))
+                    .build();
+
+            HttpResponse<String> findRes = httpClient.send(findUserReq, HttpResponse.BodyHandlers.ofString());
+            if (findRes.statusCode() == 200) {
+                com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(findRes.body());
+                com.fasterxml.jackson.databind.JsonNode users = root.path("users");
+                if (users.isArray()) {
+                    for (com.fasterxml.jackson.databind.JsonNode u : users) {
+                        String userEmail = u.path("email").asText("");
+                        if (userEmail.equalsIgnoreCase(email.trim())) {
+                            String supabaseUserId = u.path("id").asText();
+                            if (!supabaseUserId.isBlank()) {
+                                Map<String, Object> updateBody = Map.of("password", newPassword);
+                                HttpRequest updateReq = HttpRequest.newBuilder()
+                                        .uri(URI.create(supabaseUrl + "/auth/v1/admin/users/" + supabaseUserId))
+                                        .header("apikey", supabaseServiceRoleKey)
+                                        .header("Authorization", "Bearer " + supabaseServiceRoleKey)
+                                        .header("Content-Type", "application/json")
+                                        .PUT(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(updateBody)))
+                                        .timeout(Duration.ofSeconds(5))
+                                        .build();
+                                HttpResponse<String> updateRes = httpClient.send(updateReq, HttpResponse.BodyHandlers.ofString());
+                                log.info("Supabase password sync for {} returned status {}", email, updateRes.statusCode());
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to synchronize updated password to Supabase for {}: {}", email, ex.getMessage());
+        }
+    }
+
+    /**
+     * Verifies the Supabase access token against Supabase and returns the identity it authenticates.
+     * Fails closed: any transport error, non-200 response, or missing email in the response is rejected.
+     * The verified Supabase response is the only trusted source of identity; client-supplied
+     * email/username fields are never used for authentication decisions.
+     */
+    private SupabaseIdentity verifySupabaseAccessToken(String accessToken) {
+        if (supabaseUrl.isBlank() || supabaseAnonKey.isBlank()) {
+            throw new UnauthorizedException("Supabase is not configured on this server.");
+        }
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new UnauthorizedException("A valid Supabase access token is required.");
+        }
+        try {
+            HttpRequest verifyReq = HttpRequest.newBuilder()
+                    .uri(URI.create(supabaseUrl + "/auth/v1/user"))
+                    .header("apikey", supabaseAnonKey)
+                    .header("Authorization", "Bearer " + accessToken)
+                    .GET()
+                    .timeout(Duration.ofSeconds(5))
+                    .build();
+
+            HttpResponse<String> verifyRes = httpClient.send(verifyReq, HttpResponse.BodyHandlers.ofString());
+            if (verifyRes.statusCode() != 200) {
+                throw new UnauthorizedException("Supabase access token verification failed.");
+            }
+
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(verifyRes.body());
+            String email = node.path("email").asText(null);
+            if (email == null || email.isBlank()) {
+                throw new UnauthorizedException("Supabase access token verification failed.");
+            }
+
+            return new SupabaseIdentity(email.toLowerCase().trim(), resolveSupabaseUsername(node));
+        } catch (UnauthorizedException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new UnauthorizedException("Supabase access token verification failed.");
+        }
+    }
+
+    private String resolveSupabaseUsername(com.fasterxml.jackson.databind.JsonNode node) {
+        com.fasterxml.jackson.databind.JsonNode metadata = node.path("user_metadata");
+        for (String key : new String[]{"username", "user_name", "full_name", "name"}) {
+            String candidate = metadata.path(key).asText(null);
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate.trim();
+            }
+        }
+        return null;
+    }
+
+    private record SupabaseIdentity(String email, String username) {}
+
+    private String resolveUniqueUsername(String base) {
+        String candidate = base.replaceAll("[^a-zA-Z0-9_-]", "_");
+        if (candidate.isBlank()) {
+            candidate = "user_" + (System.currentTimeMillis() % 10000);
+        }
+        if (!userRepository.existsByUsername(candidate)) {
+            return candidate;
+        }
+        for (int i = 1; i <= 20; i++) {
+            String test = candidate + "_" + i;
+            if (!userRepository.existsByUsername(test)) {
+                return test;
+            }
+        }
+        return candidate + "_" + (System.currentTimeMillis() % 10000);
+    }
+}

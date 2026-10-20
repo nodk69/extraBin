@@ -1,0 +1,65 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Documentation (user requested not to push)
+docs/
+*.md
+DECISIONS.md
+CHANGELOG.md
+README.md
+!backend/README.md
+!frontend/README.md
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build outputs
+backend/target/
+frontend/dist/
+frontend/build/
+frontend/node_modules/
+**/*.jar
+**/*.war
+
+# Logs
+*.log
+logs/
+
+# Test coverage & reports
+coverage/
+.nyc_output/
+*-reports/
+
+# Docker
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.qoder/
+
+# Performance test outputs
+performance-tests/results/
+performance-tests/output/
+
+# Compiled assets
+*.class
+*.o
+*.so
+
+# Qoder specific
+.qoder-tmp/

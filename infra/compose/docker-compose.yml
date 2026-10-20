@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pastebin-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pastebin
+      POSTGRES_USER: pastebin
+      # P0-02: fail closed. Deployment must supply the database secret via .env; compose
+      # refuses to render this file when it is missing instead of silently falling back
+      # to a hardcoded password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pastebin -d pastebin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: pastebin-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pastebin
+      SPRING_DATASOURCE_USERNAME: pastebin
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_SESSION_SECURE_COOKIE: ${APP_SESSION_SECURE_COOKIE:-"true"}
+      APP_CORS_ALLOWED_ORIGINS: "http://localhost,http://localhost:80"
+      APP_CLEANUP_CRON: "0 */5 * * * *"
+      # Audit fix P0-01/P1-01: nginx is the trusted reverse proxy in this topology.
+      # The backend evaluates X-Real-IP ONLY when the TCP peer is inside this subnet.
+      # The compose network is pinned below so the subnet is deterministic.
+      APP_TRUSTED_PROXIES: ${APP_TRUSTED_PROXIES:-172.28.0.0/16}
+      # P0-04/P1-20: actuator is served on a dedicated management port that is exposed
+      # only inside the compose network for Prometheus. nginx (and therefore the
+      # internet) cannot reach /actuator at all — the main port no longer serves it.
+      MANAGEMENT_PORT: "8081"
+      # Supabase interop: without these the backend fails closed on every auth-sync
+      # request ("Supabase is not configured on this server"), which breaks the
+      # shipped OAuth login flow. URL + anon key are the *public* project endpoints
+      # (same values the SPA uses); the service-role key is SECRET and used only by
+      # the admin-provisioning endpoint.
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL in .env}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?Set SUPABASE_ANON_KEY in .env}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set SUPABASE_SERVICE_ROLE_KEY in .env}
+      # Error tracking: leave empty in dev to disable Sentry.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_VOTE_PEPPER: ${APP_VOTE_PEPPER:-}
+    expose:
+      - "8080"
+      - "8081"
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: pastebin-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: pastebin-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+
+volumes:
+  postgres_data:
+    driver: local
+
+# Audit fix P0-01: pin the compose network so the backend's APP_TRUSTED_PROXIES subnet
+# matches deterministically regardless of local Docker pool allocation order.
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1

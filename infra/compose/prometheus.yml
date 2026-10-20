@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alerting rules for production monitoring.
+# Alerts surface in the Prometheus UI at http://localhost:9090/alerts.
+# Alertmanager integration is out of scope for single-instance deployment.
+rule_files:
+  - "/etc/prometheus/alerting-rules.yml"
+
+scrape_configs:
+  - job_name: "pastebin-backend"
+    metrics_path: "/actuator/prometheus"
+    # P0-04/P1-20: scrape the dedicated management port — the main application port no
+    # longer serves /actuator in prod (defense in depth; nginx also blocks it).
+    static_configs:
+      - targets: ["backend:8081"]

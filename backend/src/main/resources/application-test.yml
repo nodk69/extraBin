@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:pastebintest;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    clean-disabled: false
+    locations: classpath:db/migration
+
+pastebin:
+  security:
+    vote-pepper: "test-vote-pepper-constant-32bytes-secret!!"
+
+logging:
+  level:
+    com.pastebin: DEBUG
+    org.flywaydb: INFO
