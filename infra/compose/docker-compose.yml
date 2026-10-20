@@ -66,8 +66,8 @@ services:
 
   frontend:
     build:
-      context: ../../frontend
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: frontend/Dockerfile
     container_name: pastebin-frontend
     restart: unless-stopped
     depends_on:

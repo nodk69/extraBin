@@ -1,0 +1,60 @@
+# Dependencies (rebuilt inside container via npm ci)
+frontend/node_modules
+
+# Build output (produced inside container via npm run build)
+frontend/dist
+
+# Version control
+.git
+.gitignore
+
+# Test artifacts
+frontend/coverage
+frontend/playwright-report
+frontend/test-results
+
+# Environment files — NEVER leak host secrets into the image
+.env
+.env.local
+.env.*.local
+.env.example
+backend/.env
+backend/.env.*
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backend (not needed for frontend build)
+backend/src
+backend/target
+backend/mvnw
+backend/mvnw.cmd
+backend/.mvn
+
+# Infrastructure (not needed for frontend build)
+infra
+
+# CI configuration
+.github
+
+# Debug / log files
+*.log
+npm-debug.log*
+
+# Qoder / agent artifacts
+.qoder
+.freebuff
+
+# Documentation not needed for build (keep docs/features/ for Vite imports)
+docs/README.md
+AUTHORIZATION_FIX_SUMMARY.md
+DECISIONS.md
+CHANGELOG.md
+README.md
