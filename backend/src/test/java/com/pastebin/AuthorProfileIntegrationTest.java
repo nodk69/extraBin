@@ -25,6 +25,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItem;
@@ -346,7 +347,10 @@ class AuthorProfileIntegrationTest {
 
         JsonNode page = pastesJson(username, 0, 18);
         assertEquals(2, page.get("totalElements").asLong());
-        assertEquals(List.of(aliceTwo, aliceOne), ids(page.get("items")));
+        // AP-08 is about exclusion, not ordering: when both inserts share a createdAt the
+        // documented tie-break is publicId ascending, so creation order is not asserted here.
+        // Newest-first ordering is covered deterministically by AP-06 (backdated timestamps).
+        assertEquals(Set.of(aliceTwo, aliceOne), Set.copyOf(ids(page.get("items"))));
     }
 
     // ------------------------------------------------------------------ AP-09

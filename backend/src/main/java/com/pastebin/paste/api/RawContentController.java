@@ -114,9 +114,7 @@ public class RawContentController {
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
         PasteService.DownloadData data = pasteService.getDownloadData(id, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
-        org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
-                .filename(data.filename())
-                .build();
+        org.springframework.http.ContentDisposition cd = com.pastebin.shared.security.FilenameSanitizer.buildContentDisposition(data.filename());
 
         VaryHeader.write(httpResponse, VaryHeader.CREDENTIALS);
 
@@ -152,9 +150,7 @@ public class RawContentController {
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
         PasteService.DownloadData data = pasteService.getDownloadFileData(id, filename, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
-        org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
-                .filename(data.filename())
-                .build();
+        org.springframework.http.ContentDisposition cd = com.pastebin.shared.security.FilenameSanitizer.buildContentDisposition(data.filename());
 
         var responseBuilder = ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
@@ -220,9 +216,7 @@ public class RawContentController {
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
         PasteService.DownloadData data = pasteService.getDownloadFileDataById(id, fileId, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
-        org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
-                .filename(data.filename())
-                .build();
+        org.springframework.http.ContentDisposition cd = com.pastebin.shared.security.FilenameSanitizer.buildContentDisposition(data.filename());
 
         var responseBuilder = ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
@@ -253,9 +247,7 @@ public class RawContentController {
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
         PasteService.ZipDownloadData zipData = pasteService.getZipDownloadData(id, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
-        org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
-                .filename(zipData.filename())
-                .build();
+        org.springframework.http.ContentDisposition cd = com.pastebin.shared.security.FilenameSanitizer.buildContentDisposition(zipData.filename());
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/zip"))

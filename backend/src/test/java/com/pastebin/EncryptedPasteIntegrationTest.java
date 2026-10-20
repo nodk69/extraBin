@@ -312,7 +312,7 @@ class EncryptedPasteIntegrationTest {
     }
 
     @Test
-    void embedEndpoint_forbiddenForEncryptedPastes() throws Exception {
+    void embedEndpoint_notFoundForEncryptedPastes() throws Exception {
         CreateEncryptedPasteRequest req = createPassphraseRequest(List.of(createDummyFile("embed_test.txt", new byte[]{1, 2})), false);
         MvcResult createResult = mockMvc.perform(post("/api/v1/pastes/encrypted")
                         .with(csrf())
@@ -323,8 +323,10 @@ class EncryptedPasteIntegrationTest {
 
         String pasteId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
 
+        // An encrypted paste is not embed-eligible: the response must be the uniform 404
+        // used for unavailable pastes, never a 403 that would confirm the paste exists.
         mockMvc.perform(get("/api/v1/pastes/" + pasteId + "/embed"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test

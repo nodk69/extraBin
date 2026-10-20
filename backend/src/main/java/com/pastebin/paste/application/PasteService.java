@@ -18,12 +18,14 @@ import com.pastebin.paste.infrastructure.FolderRepository;
 import com.pastebin.paste.infrastructure.PasteRepository;
 import com.pastebin.paste.infrastructure.PasteStarRepository;
 import com.pastebin.paste.infrastructure.PasteVoteRepository;
+import com.pastebin.shared.errors.ArchiveLimitException;
 import com.pastebin.shared.errors.BadRequestException;
 import com.pastebin.shared.errors.ConflictException;
 import com.pastebin.shared.errors.ForbiddenException;
 import com.pastebin.shared.errors.PayloadTooLargeException;
 import com.pastebin.shared.errors.ResourceNotFoundException;
 import com.pastebin.shared.errors.UnauthorizedException;
+import com.pastebin.shared.security.FilenameSanitizer;
 import com.pastebin.shared.security.RateLimiterService;
 import com.pastebin.paste.api.dto.CreateEncryptedPasteRequest;
 import com.pastebin.paste.api.dto.EncryptedFilePayload;
@@ -74,6 +76,18 @@ public class PasteService {
     @Value("${pastebin.content.max-bytes:1048576}")
     private int maxContentBytes;
 
+    @Value("${pastebin.share.archive-max-entries:50}")
+    private int archiveMaxEntries = 50;
+
+    @Value("${pastebin.share.archive-max-bytes:10485760}")
+    private long archiveMaxBytes = 10485760L;
+
+    @Value("${pastebin.share.archive-max-output-bytes:10485760}")
+    private long archiveMaxOutputBytes = 10485760L;
+
+    @Value("${pastebin.share.public-base-url:http://localhost:5173}")
+    private String publicBaseUrl = "http://localhost:5173";
+
     @org.springframework.beans.factory.annotation.Autowired
     public PasteService(PasteRepository pasteRepository,
                         FolderRepository folderRepository,
@@ -95,6 +109,19 @@ public class PasteService {
         this.pasteStarRepository = pasteStarRepository;
         this.libraryService = libraryService.getIfAvailable();
         this.unlockTokenService = unlockTokenService;
+    }
+
+    @jakarta.annotation.PostConstruct
+    public void validateArchiveLimits() {
+        if (archiveMaxEntries <= 0) {
+            throw new IllegalStateException("pastebin.share.archive-max-entries must be greater than 0");
+        }
+        if (archiveMaxBytes <= 0) {
+            throw new IllegalStateException("pastebin.share.archive-max-bytes must be greater than 0");
+        }
+        if (archiveMaxOutputBytes <= 0) {
+            throw new IllegalStateException("pastebin.share.archive-max-output-bytes must be greater than 0");
+        }
     }
 
     public PasteService(PasteRepository pasteRepository,
@@ -158,8 +185,10 @@ public class PasteService {
                 throw new BadRequestException("Duplicate filename in paste: " + filename);
             }
 
-            if (fileReq.content() == null || fileReq.content().isBlank()) {
-                throw new BadRequestException("File '" + filename + "' content must not be blank.");
+            // A present-but-empty file is a valid zero-byte file; only a missing/null
+            // content field is invalid (the legacy single-content field still rejects blanks).
+            if (fileReq.content() == null) {
+                throw new BadRequestException("File '" + filename + "' content must be provided.");
             }
 
             validateTextContent(filename, fileReq.content());
@@ -615,22 +644,22 @@ public class PasteService {
 
         // 1. Only PUBLIC pastes can be embedded
         if (paste.getVisibility() != Visibility.PUBLIC) {
-            throw new ForbiddenException("Only public pastes can be embedded.");
+            throw new ResourceNotFoundException("Paste not found or has expired.");
         }
 
         // 2. Password-protected pastes cannot be embedded
         if (paste.isPasswordProtected()) {
-            throw new ForbiddenException("Password-protected pastes cannot be embedded.");
+            throw new ResourceNotFoundException("Paste not found or has expired.");
         }
 
         // 3. View-once pastes cannot be embedded (preserves view-once without accidental destruction)
         if (paste.isBurnAfterReading()) {
-            throw new ForbiddenException("View-once pastes cannot be embedded.");
+            throw new ResourceNotFoundException("Paste not found or has expired.");
         }
 
         // 4. Encrypted pastes cannot be embedded
         if (paste.isEncrypted()) {
-            throw new ForbiddenException("Encrypted pastes cannot be embedded.");
+            throw new ResourceNotFoundException("Paste not found or has expired.");
         }
 
         List<PasteFileResponse> fileResponses = resolveFileResponses(paste);
@@ -641,6 +670,87 @@ public class PasteService {
                 paste.getLanguage(),
                 paste.getCreatedAt(),
                 fileResponses
+        );
+    }
+
+    public String getPublicBaseUrl() {
+        return (publicBaseUrl != null && !publicBaseUrl.isBlank())
+                ? (publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl)
+                : "http://localhost:5173";
+    }
+
+    @Transactional(readOnly = true)
+    public com.pastebin.paste.api.dto.PasteMetadataHtmlResponse getPasteMetadataHtml(String publicId) {
+        Paste paste = pasteRepository.findActiveByPublicId(publicId, Instant.now())
+                .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
+
+        if (paste.getModerationState() == ModerationState.HIDDEN) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        if (paste.getVisibility() != Visibility.PUBLIC) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        if (paste.isPasswordProtected()) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        if (paste.isBurnAfterReading()) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        if (paste.isEncrypted()) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        return new com.pastebin.paste.api.dto.PasteMetadataHtmlResponse(
+                paste.getPublicId(),
+                paste.getTitle(),
+                paste.getExpiresAt()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public com.pastebin.paste.api.dto.ShareDescriptorResponse getShareDescriptor(
+            String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
+
+        String base = (publicBaseUrl != null && !publicBaseUrl.isBlank())
+                ? (publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl)
+                : "http://localhost:5173";
+
+        String canonicalUrl = base + "/p/" + paste.getPublicId();
+        if (paste.getVisibility() == Visibility.UNLISTED && shareToken != null && !shareToken.isBlank()) {
+            canonicalUrl = canonicalUrl + "?token=" + shareToken;
+        }
+
+        String rawUrl = base + "/api/v1/pastes/" + paste.getPublicId() + "/raw";
+        String downloadUrl = base + "/api/v1/pastes/" + paste.getPublicId() + "/download";
+        String zipDownloadUrl = base + "/api/v1/pastes/" + paste.getPublicId() + "/download-zip";
+        String embedUrl = base + "/embed/" + paste.getPublicId();
+
+        String shareStatus = (paste.getVisibility() == Visibility.UNLISTED)
+                ? (paste.getShareAccessState() != null ? paste.getShareAccessState().name() : "ACTIVE")
+                : "NOT_APPLICABLE";
+
+        boolean ogEligible = paste.getVisibility() == Visibility.PUBLIC
+                && !paste.isPasswordProtected()
+                && !paste.isBurnAfterReading()
+                && !paste.isEncrypted()
+                && paste.getModerationState() != ModerationState.HIDDEN;
+
+        return new com.pastebin.paste.api.dto.ShareDescriptorResponse(
+                paste.getPublicId(),
+                canonicalUrl,
+                rawUrl,
+                downloadUrl,
+                zipDownloadUrl,
+                embedUrl,
+                paste.getVisibility().name(),
+                shareStatus,
+                paste.isPasswordProtected(),
+                ogEligible
         );
     }
 
@@ -862,19 +972,23 @@ public class PasteService {
 
         if (paste.isEncrypted()) {
             byte[] bytes = buildEncryptedBundleJson(paste);
-            String filename = sanitizeFilename(paste.getTitle(), paste.getPublicId()) + "-encrypted.json";
+            String rawTitle = (paste.getTitle() != null && !paste.getTitle().isBlank())
+                    ? paste.getTitle() + "-encrypted.json"
+                    : "paste-" + paste.getPublicId() + "-encrypted.json";
+            String filename = FilenameSanitizer.sanitizeForDownload(rawTitle, paste.getPublicId());
             return new DownloadData(filename, bytes, paste.getEncryptionMode());
         }
 
-        // If single file in files table, use its exact filename
+        // If single file in files table, sanitize and return its filename
         if (paste.getFiles() != null && paste.getFiles().size() == 1) {
             PasteFile single = paste.getFiles().get(0);
-            return new DownloadData(single.getFilename(), single.getContent());
+            String safeName = FilenameSanitizer.sanitizeForDownload(single.getFilename(), paste.getPublicId());
+            return new DownloadData(safeName, single.getContent());
         }
 
         String extension = resolveExtension(paste.getLanguage());
-        String safeTitle = sanitizeFilename(paste.getTitle(), paste.getPublicId());
-        String filename = safeTitle + "." + extension;
+        String safeBase = FilenameSanitizer.sanitizeForDownload(paste.getTitle(), paste.getPublicId());
+        String filename = safeBase.contains(".") ? safeBase : safeBase + "." + extension;
 
         return new DownloadData(filename, paste.getContent());
     }
@@ -907,10 +1021,11 @@ public class PasteService {
         }
 
         PasteFile file = findFileOrThrow(paste, filename);
+        String safeName = FilenameSanitizer.sanitizeForDownload(file.getFilename(), paste.getPublicId());
         if (paste.isEncrypted()) {
-            return new DownloadData(file.getFilename(), file.getCiphertext(), paste.getEncryptionMode());
+            return new DownloadData(safeName, file.getCiphertext(), paste.getEncryptionMode());
         }
-        return new DownloadData(file.getFilename(), file.getContent());
+        return new DownloadData(safeName, file.getContent());
     }
 
     @Transactional
@@ -926,10 +1041,11 @@ public class PasteService {
         }
 
         PasteFile file = findFileByIdOrThrow(paste, fileId);
+        String safeName = FilenameSanitizer.sanitizeForDownload(file.getFilename(), paste.getPublicId());
         if (paste.isEncrypted()) {
-            return new DownloadData(file.getFilename(), file.getCiphertext(), paste.getEncryptionMode());
+            return new DownloadData(safeName, file.getCiphertext(), paste.getEncryptionMode());
         }
-        return new DownloadData(file.getFilename(), file.getContent());
+        return new DownloadData(safeName, file.getContent());
     }
 
     @Transactional
@@ -955,47 +1071,132 @@ public class PasteService {
             files = List.of(new PasteFile(paste, singleName, paste.getContent(), paste.getLanguage(), 0));
         }
 
-        String zipFilename = sanitizeFilename(paste.getTitle(), paste.getPublicId()) + ".zip";
+        // 1. Entry count cap check
+        if (files.size() > archiveMaxEntries) {
+            throw new ArchiveLimitException("Archive entry count " + files.size() + " exceeds the limit of " + archiveMaxEntries + ".");
+        }
+
+        // 2. Uncompressed byte cap check (overflow-safe)
+        long totalUncompressedBytes = 0L;
+        for (PasteFile file : files) {
+            long fileSize;
+            if (paste.isEncrypted()) {
+                int nonceLen = file.getNonce() != null ? file.getNonce().length : 0;
+                int ctLen = file.getCiphertext() != null ? file.getCiphertext().length : 0;
+                int tagLen = file.getAuthTag() != null ? file.getAuthTag().length : 0;
+                fileSize = (long) nonceLen + ctLen + tagLen;
+            } else {
+                if (file.getCiphertext() != null) {
+                    fileSize = file.getCiphertext().length;
+                } else if (file.getContent() != null) {
+                    fileSize = file.getContent().getBytes(StandardCharsets.UTF_8).length;
+                } else {
+                    fileSize = 0L;
+                }
+            }
+            try {
+                totalUncompressedBytes = Math.addExact(totalUncompressedBytes, fileSize);
+            } catch (ArithmeticException ex) {
+                throw new ArchiveLimitException("Archive uncompressed size exceeds limit.");
+            }
+            if (totalUncompressedBytes > archiveMaxBytes) {
+                throw new ArchiveLimitException("Archive uncompressed size " + totalUncompressedBytes + " exceeds limit of " + archiveMaxBytes + " bytes.");
+            }
+        }
+
+        String safeBase = FilenameSanitizer.sanitizeForDownload(paste.getTitle(), paste.getPublicId());
+        String zipFilename = safeBase + ".zip";
+
+        // Bounded counting output stream to enforce archiveMaxOutputBytes including finalization
+        final long maxOutBytes = this.archiveMaxOutputBytes;
+        class BoundedOutputStream extends java.io.OutputStream {
+            private final java.io.OutputStream delegate;
+            private long count = 0L;
+
+            BoundedOutputStream(java.io.OutputStream delegate) {
+                this.delegate = delegate;
+            }
+
+            @Override
+            public void write(int b) throws IOException {
+                if (count + 1 > maxOutBytes) {
+                    throw new ArchiveLimitException("Archive compressed output exceeds limit of " + maxOutBytes + " bytes.");
+                }
+                delegate.write(b);
+                count++;
+            }
+
+            @Override
+            public void write(byte[] b, int off, int len) throws IOException {
+                if (b == null) {
+                    throw new NullPointerException();
+                }
+                if (count + len > maxOutBytes) {
+                    throw new ArchiveLimitException("Archive compressed output exceeds limit of " + maxOutBytes + " bytes.");
+                }
+                delegate.write(b, off, len);
+                count += len;
+            }
+
+            @Override
+            public void flush() throws IOException {
+                delegate.flush();
+            }
+
+            @Override
+            public void close() throws IOException {
+                delegate.close();
+            }
+        }
 
         if (paste.isEncrypted()) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            try (ZipOutputStream zos = new ZipOutputStream(baos, StandardCharsets.UTF_8)) {
-                // 1. Build and write manifest.json
-                Map<String, Object> manifest = new LinkedHashMap<>();
-                manifest.put("format", "extra:enc-zip:v1");
-                manifest.put("pasteId", paste.getPublicId());
-                manifest.put("encryptionMode", paste.getEncryptionMode().name());
-                manifest.put("kdfSalt", Base64.getEncoder().encodeToString(paste.getKdfSalt() != null ? paste.getKdfSalt() : new byte[0]));
-                manifest.put("kdfIterations", paste.getKdfIterations());
-                manifest.put("wrappedKey", paste.getWrappedKey() != null ? Base64.getEncoder().encodeToString(paste.getWrappedKey()) : null);
+            List<String> rawNames = files.stream().map(PasteFile::getFilename).toList();
+            List<String> dedupedNames = FilenameSanitizer.sanitizeAndDeduplicateForZip(rawNames);
 
-                List<Map<String, Object>> manifestFiles = new ArrayList<>();
-                for (PasteFile file : files) {
-                    String safeName = sanitizeFilenameForZip(file.getFilename());
-                    String encEntryName = safeName + ".enc";
+            java.io.File tempFile = null;
+            try {
+                tempFile = java.io.File.createTempFile("extra-bin-enc-zip-", ".tmp");
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile);
+                     BoundedOutputStream bos = new BoundedOutputStream(fos);
+                     ZipOutputStream zos = new ZipOutputStream(bos, StandardCharsets.UTF_8)) {
 
-                    Map<String, Object> fileEntry = new LinkedHashMap<>();
-                    fileEntry.put("filename", encEntryName);
-                    fileEntry.put("originalFilename", safeName);
-                    fileEntry.put("nonce", Base64.getEncoder().encodeToString(file.getNonce() != null ? file.getNonce() : new byte[0]));
-                    fileEntry.put("authTag", Base64.getEncoder().encodeToString(file.getAuthTag() != null ? file.getAuthTag() : new byte[0]));
-                    int ctLen = file.getCiphertext() != null ? file.getCiphertext().length : 0;
-                    fileEntry.put("ciphertextLength", ctLen);
-                    manifestFiles.add(fileEntry);
-                }
-                manifest.put("files", manifestFiles);
+                    // 1. Build and write manifest.json
+                    Map<String, Object> manifest = new LinkedHashMap<>();
+                    manifest.put("format", "extra:enc-zip:v1");
+                    manifest.put("pasteId", paste.getPublicId());
+                    manifest.put("encryptionMode", paste.getEncryptionMode().name());
+                    manifest.put("kdfSalt", Base64.getEncoder().encodeToString(paste.getKdfSalt() != null ? paste.getKdfSalt() : new byte[0]));
+                    manifest.put("kdfIterations", paste.getKdfIterations());
+                    manifest.put("wrappedKey", paste.getWrappedKey() != null ? Base64.getEncoder().encodeToString(paste.getWrappedKey()) : null);
 
-                ZipEntry manifestEntry = new ZipEntry("manifest.json");
-                zos.putNextEntry(manifestEntry);
-                zos.write(objectMapper.writeValueAsBytes(manifest));
-                zos.closeEntry();
+                    List<Map<String, Object>> manifestFiles = new ArrayList<>();
+                    for (int i = 0; i < files.size(); i++) {
+                        PasteFile file = files.get(i);
+                        String safeName = dedupedNames.get(i);
+                        String encEntryName = safeName + ".enc";
 
-                // 2. Write each .enc file containing nonce || ciphertext || authTag
-                Set<String> addedNames = new HashSet<>();
-                for (PasteFile file : files) {
-                    String safeName = sanitizeFilenameForZip(file.getFilename());
-                    String encEntryName = safeName + ".enc";
-                    if (addedNames.add(encEntryName.toLowerCase(Locale.ROOT))) {
+                        Map<String, Object> fileEntry = new LinkedHashMap<>();
+                        fileEntry.put("filename", encEntryName);
+                        fileEntry.put("originalFilename", safeName);
+                        fileEntry.put("nonce", Base64.getEncoder().encodeToString(file.getNonce() != null ? file.getNonce() : new byte[0]));
+                        fileEntry.put("authTag", Base64.getEncoder().encodeToString(file.getAuthTag() != null ? file.getAuthTag() : new byte[0]));
+                        int ctLen = file.getCiphertext() != null ? file.getCiphertext().length : 0;
+                        fileEntry.put("ciphertextLength", ctLen);
+                        manifestFiles.add(fileEntry);
+                    }
+                    manifest.put("files", manifestFiles);
+
+                    ZipEntry manifestEntry = new ZipEntry("manifest.json");
+                    zos.putNextEntry(manifestEntry);
+                    zos.write(objectMapper.writeValueAsBytes(manifest));
+                    zos.closeEntry();
+
+                    // 2. Write each .enc file containing nonce || ciphertext || authTag
+                    for (int i = 0; i < files.size(); i++) {
+                        PasteFile file = files.get(i);
+                        String safeName = dedupedNames.get(i);
+                        String encEntryName = safeName + ".enc";
+
                         ZipEntry entry = new ZipEntry(encEntryName);
                         zos.putNextEntry(entry);
                         byte[] nonce = file.getNonce() != null ? file.getNonce() : new byte[0];
@@ -1010,33 +1211,58 @@ public class PasteService {
                         zos.write(entryPayload);
                         zos.closeEntry();
                     }
+                    zos.finish();
                 }
+
+                byte[] zipBytes = java.nio.file.Files.readAllBytes(tempFile.toPath());
+                return new ZipDownloadData(zipFilename, zipBytes);
+            } catch (ArchiveLimitException e) {
+                throw e;
             } catch (IOException e) {
                 throw new RuntimeException("Failed to generate encrypted ZIP archive for paste", e);
+            } finally {
+                if (tempFile != null && tempFile.exists()) {
+                    tempFile.delete();
+                }
             }
-            return new ZipDownloadData(zipFilename, baos.toByteArray());
         }
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (ZipOutputStream zos = new ZipOutputStream(baos, StandardCharsets.UTF_8)) {
-            Set<String> addedNames = new HashSet<>();
-            for (PasteFile file : files) {
-                String safeName = sanitizeFilenameForZip(file.getFilename());
-                if (addedNames.add(safeName.toLowerCase(Locale.ROOT))) {
+        List<String> rawNames = files.stream().map(PasteFile::getFilename).toList();
+        List<String> dedupedNames = FilenameSanitizer.sanitizeAndDeduplicateForZip(rawNames);
+
+        java.io.File tempFile = null;
+        try {
+            tempFile = java.io.File.createTempFile("extra-bin-zip-", ".tmp");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile);
+                 BoundedOutputStream bos = new BoundedOutputStream(fos);
+                 ZipOutputStream zos = new ZipOutputStream(bos, StandardCharsets.UTF_8)) {
+
+                for (int i = 0; i < files.size(); i++) {
+                    PasteFile file = files.get(i);
+                    String safeName = dedupedNames.get(i);
+
                     ZipEntry entry = new ZipEntry(safeName);
                     zos.putNextEntry(entry);
-                    byte[] payload = file.getCiphertext() != null 
-                            ? file.getCiphertext() 
+                    byte[] payload = file.getCiphertext() != null
+                            ? file.getCiphertext()
                             : (file.getContent() != null ? file.getContent().getBytes(StandardCharsets.UTF_8) : new byte[0]);
                     zos.write(payload);
                     zos.closeEntry();
                 }
+                zos.finish();
             }
+
+            byte[] zipBytes = java.nio.file.Files.readAllBytes(tempFile.toPath());
+            return new ZipDownloadData(zipFilename, zipBytes);
+        } catch (ArchiveLimitException e) {
+            throw e;
         } catch (IOException e) {
             throw new RuntimeException("Failed to generate ZIP archive for paste", e);
+        } finally {
+            if (tempFile != null && tempFile.exists()) {
+                tempFile.delete();
+            }
         }
-
-        return new ZipDownloadData(zipFilename, baos.toByteArray());
     }
 
     private boolean isAllZeros(byte[] bytes, int start, int end) {
@@ -1242,7 +1468,8 @@ public class PasteService {
                                         String providedPassword, String clientIp, String unlockToken) {
         Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
 
-        if (unlockToken != null && !unlockToken.isBlank() && paste.isPasswordProtected()) {
+        if (unlockToken != null && !unlockToken.isBlank() && paste.isPasswordProtected()
+                && unlockTokenService != null) {
             var result = unlockTokenService.validateToken(unlockToken, publicId, clientIp);
             if (result.isPresent()) {
                 return paste;

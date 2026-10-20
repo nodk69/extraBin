@@ -158,7 +158,7 @@ class ContentAuthorizationParityIntegrationTest {
 
         expectContentStatuses(paste.id(), null, 404);
         mockMvc.perform(get("/api/v1/pastes/" + paste.id() + "/embed"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -175,7 +175,7 @@ class ContentAuthorizationParityIntegrationTest {
 
         expectContentStatuses(paste.id(), paste.shareToken(), 404);
         mockMvc.perform(get("/api/v1/pastes/" + paste.id() + "/embed"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -269,9 +269,11 @@ class ContentAuthorizationParityIntegrationTest {
                 .andExpect(status().isOk());
 
         // Embed must never accept a password and must never expose a challenge bypass.
+        // Like every other content surface it answers with the uniform 404, so an
+        // ineligible embed never confirms that the paste exists.
         mockMvc.perform(get("/api/v1/pastes/" + paste.id() + "/embed")
                         .header("X-Paste-Password", "Pass1234!"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -346,7 +348,7 @@ class ContentAuthorizationParityIntegrationTest {
                 Visibility.PUBLIC, ExpirationPolicy.VIEW_ONCE, null, null);
 
         mockMvc.perform(get("/api/v1/pastes/" + paste.id() + "/embed"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
 
         assertThat(pasteRepository.findActiveByPublicId(paste.id(), Instant.now())).isPresent();
 

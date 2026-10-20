@@ -56,6 +56,10 @@ services:
       # Error tracking: leave empty in dev to disable Sentry.
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_VOTE_PEPPER: ${APP_VOTE_PEPPER:-}
+      # Security gate: unlock tokens are HMAC-signed, so the key must be deployment-specific
+      # and at least 32 bytes. Compose refuses to render without it instead of letting the
+      # backend boot with a predictable development default.
+      PASTEBIN_SHARE_UNLOCK_SECRET: ${PASTEBIN_SHARE_UNLOCK_SECRET:?Set PASTEBIN_SHARE_UNLOCK_SECRET (>=32 bytes, e.g. `openssl rand -base64 32`) in .env}
     expose:
       - "8080"
       - "8081"

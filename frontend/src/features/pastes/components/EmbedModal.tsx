@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Icon } from '../../../components/ui/PaperIcon';
+import { resolvePublicBaseUrl } from '../lib/shareUrl';
 
 interface EmbedModalProps {
   isOpen: boolean;
@@ -18,12 +19,7 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
   const [embedHeight, setEmbedHeight] = useState('450');
   const [copyError, setCopyError] = useState<string | null>(null);
 
-  const origin = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      return window.location.origin;
-    }
-    return '';
-  }, []);
+  const origin = useMemo(() => resolvePublicBaseUrl(), []);
 
   const embedUrl = `${origin}/embed/${pasteId}`;
 

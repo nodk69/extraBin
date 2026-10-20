@@ -15,6 +15,10 @@ spring:
 pastebin:
   security:
     vote-pepper: "test-vote-pepper-constant-32bytes-secret!!"
+  share:
+    # Test-only key. It is not reachable from the prod profile and never used in production.
+    unlock-secret: "${PASTEBIN_SHARE_UNLOCK_SECRET:test-only-unlock-secret-32-bytes-minimum}"
+    unlock-ttl-seconds: 600
 
 logging:
   level:

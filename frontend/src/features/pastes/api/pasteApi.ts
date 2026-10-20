@@ -1,6 +1,57 @@
 import { apiClient, ApiError } from '../../../lib/api-client/client';
 import { CreatePastePayload, CreatePasteResult, PasteView, RotateLinkResponse } from '../types/paste';
 import type { CreateEncryptedPasteRequestDTO } from '../../../lib/crypto/e2ePaste';
+import { buildCanonicalShareUrl } from '../lib/shareUrl';
+
+/**
+ * Turns a failed blob request into a readable RFC 9457 Problem Details error.
+ *
+ * A blob response cannot be parsed synchronously, so the error body is decoded
+ * here; when the body is not a problem document the original transport error
+ * is preserved.
+ */
+async function toBlobRequestError(err: any, fallbackDetail: string): Promise<Error> {
+  const blob = err?.response?.data;
+  if (blob && (blob instanceof Blob || typeof blob?.text === 'function' || typeof FileReader !== 'undefined')) {
+    try {
+      let text: string | undefined;
+      if (typeof blob.text === 'function') {
+        text = await blob.text();
+      } else if (typeof FileReader !== 'undefined') {
+        text = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsText(blob);
+        });
+      }
+
+      if (text) {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object' && ('status' in parsed || 'title' in parsed || 'detail' in parsed)) {
+          return new ApiError({
+            title: parsed.title || err.response.statusText || 'Error',
+            status: parsed.status || err.response.status || 500,
+            detail: parsed.detail || parsed.title || fallbackDetail,
+            properties: parsed.properties,
+            invalidParams: parsed.invalidParams,
+          });
+        }
+      }
+    } catch (parseErr) {
+      if (parseErr instanceof ApiError) {
+        return parseErr;
+      }
+      // If JSON parse fails, throw normalized ApiError with original status
+      return new ApiError({
+        title: err.response?.statusText || 'Download Error',
+        status: err.response?.status || 500,
+        detail: err.message || fallbackDetail,
+      });
+    }
+  }
+  return err;
+}
 
 export const pasteApi = {
   async createPaste(payload: CreatePastePayload): Promise<CreatePasteResult> {
@@ -142,15 +193,14 @@ export const pasteApi = {
     return `${baseUrl}/pastes/${encodeURIComponent(id)}/download-zip${query}`;
   },
 
+  /**
+   * Builds a shareable paste URL.
+   *
+   * Thin wrapper over the shared canonical-URL builder, so the paste API and
+   * the paste view can never disagree about what a share URL looks like.
+   */
   buildShareableUrl(baseUrl: string, id: string, token?: string | null, keyFragment?: string | null): string {
-    let url = `${baseUrl.replace(/\/$/, '')}/p/${encodeURIComponent(id)}`;
-    if (token) {
-      url += `?token=${encodeURIComponent(token)}`;
-    }
-    if (keyFragment) {
-      url += `#key=${encodeURIComponent(keyFragment)}`;
-    }
-    return url;
+    return buildCanonicalShareUrl({ baseUrl, pasteId: id, token, keyFragment });
   },
 
   sanitizeLogData(data: string): string {
@@ -183,46 +233,71 @@ export const pasteApi = {
       return response.data;
     } catch (err: any) {
       // Decode RFC 9457 Problem Details if server returned an error Blob
-      const blob = err?.response?.data;
-      if (blob && (blob instanceof Blob || typeof blob?.text === 'function' || typeof FileReader !== 'undefined')) {
-        try {
-          let text: string | undefined;
-          if (typeof blob.text === 'function') {
-            text = await blob.text();
-          } else if (typeof FileReader !== 'undefined') {
-            text = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => reject(reader.error);
-              reader.readAsText(blob);
-            });
-          }
+      throw await toBlobRequestError(err, 'Error downloading archive.');
+    }
+  },
 
-          if (text) {
-            const parsed = JSON.parse(text);
-            if (parsed && typeof parsed === 'object' && ('status' in parsed || 'title' in parsed || 'detail' in parsed)) {
-              throw new ApiError({
-                title: parsed.title || err.response.statusText || 'Error',
-                status: parsed.status || err.response.status || 500,
-                detail: parsed.detail || parsed.title || 'Error downloading archive.',
-                properties: parsed.properties,
-                invalidParams: parsed.invalidParams,
-              });
-            }
-          }
-        } catch (parseErr) {
-          if (parseErr instanceof ApiError) {
-            throw parseErr;
-          }
-          // If JSON parse fails, throw normalized ApiError with original status
-          throw new ApiError({
-            title: err.response?.statusText || 'Download Error',
-            status: err.response?.status || 500,
-            detail: err.message || 'Error downloading archive.',
-          });
-        }
-      }
-      throw err;
+  /**
+   * Downloads a single file of a paste using the server's persisted bytes.
+   *
+   * Password-protected pastes must never be delivered from component state:
+   * the client only ever holds the decrypted view, and the server is the
+   * authority for the stored bytes. The password and the share token travel in
+   * headers so they never end up in a URL, a browser history entry or a log.
+   */
+  async downloadFile(pasteId: string, fileId: number | string, password?: string, token?: string): Promise<Blob> {
+    if (!pasteId || typeof pasteId !== 'string' || pasteId.trim().length === 0) {
+      throw new Error('Paste ID cannot be empty.');
+    }
+    if (fileId === undefined || fileId === null || `${fileId}`.trim().length === 0) {
+      throw new Error('File ID cannot be empty.');
+    }
+    const headers: Record<string, string> = {};
+    if (password) {
+      headers['X-Paste-Password'] = password;
+    }
+    if (token) {
+      headers['X-Share-Token'] = token;
+    }
+    try {
+      const response = await apiClient.get(
+        `/pastes/${encodeURIComponent(pasteId)}/files/by-id/${encodeURIComponent(String(fileId))}/download`,
+        { headers, responseType: 'blob' }
+      );
+      return response.data;
+    } catch (err: any) {
+      throw await toBlobRequestError(err, 'Error downloading file.');
+    }
+  },
+
+  /**
+   * Fetches the raw bytes of a single file of a paste.
+   *
+   * Mirrors {@link downloadFile}: protected pastes are served from the server,
+   * never from the cached component state.
+   */
+  async getRawBlob(pasteId: string, fileId: number | string, password?: string, token?: string): Promise<Blob> {
+    if (!pasteId || typeof pasteId !== 'string' || pasteId.trim().length === 0) {
+      throw new Error('Paste ID cannot be empty.');
+    }
+    if (fileId === undefined || fileId === null || `${fileId}`.trim().length === 0) {
+      throw new Error('File ID cannot be empty.');
+    }
+    const headers: Record<string, string> = {};
+    if (password) {
+      headers['X-Paste-Password'] = password;
+    }
+    if (token) {
+      headers['X-Share-Token'] = token;
+    }
+    try {
+      const response = await apiClient.get(
+        `/pastes/${encodeURIComponent(pasteId)}/files/by-id/${encodeURIComponent(String(fileId))}/raw`,
+        { headers, responseType: 'blob' }
+      );
+      return response.data;
+    } catch (err: any) {
+      throw await toBlobRequestError(err, 'Error loading raw content.');
     }
   },
 

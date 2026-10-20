@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { pasteApi } from '../api/pasteApi';
 import { ApiError } from '../../../lib/api-client/client';
+import { buildCanonicalShareUrl, resolvePublicBaseUrl } from '../lib/shareUrl';
 
 interface PasteCreatedModalProps {
   isOpen: boolean;
@@ -116,12 +117,20 @@ export const PasteCreatedModal: React.FC<PasteCreatedModalProps> = ({
   const viewOnceActive = isViewOnce || isBurnAfterReading;
   if (!isOpen) return null;
 
-  const rawBase = (import.meta.env.VITE_PUBLIC_BASE_URL as string | undefined) || window.location.origin;
-  const publicBase = rawBase.replace(/\/+$/, '');
+  const publicBase = resolvePublicBaseUrl();
   const keyFragment = encryptionMode === 'LINK' && linkKey ? `#key=${encodeURIComponent(linkKey)}` : '';
   const tokenQuery = shareToken ? `?token=${encodeURIComponent(shareToken)}` : '';
-  const cleanShareUrl = `${publicBase}/p/${currentPasteId}${tokenQuery}`;
-  const shareUrl = `${cleanShareUrl}${keyFragment}`;
+  const cleanShareUrl = buildCanonicalShareUrl({
+    baseUrl: publicBase,
+    pasteId: currentPasteId,
+    token: shareToken,
+  });
+  const shareUrl = buildCanonicalShareUrl({
+    baseUrl: publicBase,
+    pasteId: currentPasteId,
+    token: shareToken,
+    keyFragment: encryptionMode === 'LINK' ? linkKey : null,
+  });
   const rawUrl = currentPasteId ? pasteApi.getRawUrl(currentPasteId, shareToken || undefined) : '';
   const jsonUrl = `${window.location.origin}/api/v1/pastes/${currentPasteId}.json`;
 

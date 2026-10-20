@@ -50,3 +50,15 @@ logging:
   level:
     com.pastebin: INFO
     org.springframework.web: WARN
+
+pastebin:
+  share:
+    # Security gate: fail closed. There is deliberately no default here — a production
+    # start without >=32 bytes of UTF-8 key material must abort (see UnlockTokenService),
+    # because a predictable HMAC key would let anyone forge unlock tokens.
+    unlock-secret: ${PASTEBIN_SHARE_UNLOCK_SECRET:}
+    unlock-ttl-seconds: ${PASTEBIN_SHARE_UNLOCK_TTL_SECONDS:600}
+    public-base-url: "${PASTEBIN_SHARE_PUBLIC_BASE_URL:http://localhost:5173}"
+    archive-max-entries: ${PASTEBIN_SHARE_ARCHIVE_MAX_ENTRIES:50}
+    archive-max-bytes: ${PASTEBIN_SHARE_ARCHIVE_MAX_BYTES:10485760} # 10MB uncompressed limit
+    archive-max-output-bytes: ${PASTEBIN_SHARE_ARCHIVE_MAX_OUTPUT_BYTES:10485760} # 10MB compressed output limit

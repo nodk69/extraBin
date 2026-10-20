@@ -1,5 +1,6 @@
 package com.pastebin;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pastebin.paste.api.dto.CreatePasteRequest;
 import com.pastebin.paste.api.dto.CreatePasteResponse;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Instant;
 import java.util.List;
@@ -121,8 +123,11 @@ class EmbedSecurityIntegrationTest {
         var userSession = registerAndLogin("embed_user", "embed_user@pastebin.dev");
         String pasteId = createPaste("Private Paste", "secret content", Visibility.PRIVATE, ExpirationPolicy.NEVER, null, userSession);
 
+        // An ineligible embed must be indistinguishable from a missing paste: the uniform
+        // 404 Problem Details response, never a 403 that confirms the paste exists.
         mockMvc.perform(get("/api/v1/pastes/{id}/embed", pasteId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -131,7 +136,8 @@ class EmbedSecurityIntegrationTest {
         String pasteId = createPaste("Unlisted Paste", "unlisted content", Visibility.UNLISTED, ExpirationPolicy.NEVER, null);
 
         mockMvc.perform(get("/api/v1/pastes/{id}/embed", pasteId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -140,7 +146,15 @@ class EmbedSecurityIntegrationTest {
         String pasteId = createPaste("Locked Paste", "locked content", Visibility.PUBLIC, ExpirationPolicy.NEVER, "Pass1234!");
 
         mockMvc.perform(get("/api/v1/pastes/{id}/embed", pasteId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        // The embed endpoint never accepts a credential, so even the correct password
+        // must not turn an ineligible embed into a success.
+        mockMvc.perform(get("/api/v1/pastes/{id}/embed", pasteId)
+                        .header("X-Paste-Password", "Pass1234!"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -148,9 +162,10 @@ class EmbedSecurityIntegrationTest {
     void shouldRejectEmbedForViewOncePasteAndNotConsumeIt() throws Exception {
         String pasteId = createPaste("Burn Paste", "burn me", Visibility.PUBLIC, ExpirationPolicy.BURN_AFTER_READING, null);
 
-        // Embed request must fail with 403 Forbidden
+        // Embed request must fail with the uniform 404 used for unavailable pastes
         mockMvc.perform(get("/api/v1/pastes/{id}/embed", pasteId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
 
         // Verify the paste is still present in the repository and was NOT consumed
         assertThat(pasteRepository.findActiveByPublicId(pasteId, Instant.now())).isPresent();
@@ -161,5 +176,38 @@ class EmbedSecurityIntegrationTest {
     void shouldReturn404ForNonExistentPaste() throws Exception {
         mockMvc.perform(get("/api/v1/pastes/{id}/embed", "non-existent-id-999"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Ineligible embed 404 is indistinguishable from a missing-paste 404 (no existence oracle)")
+    void ineligibleEmbed404_isIndistinguishableFromMissingPaste404() throws Exception {
+        // An unlisted paste exists but is not embed-eligible; a missing id does not exist.
+        // Both answers must be the same 404 Problem Details payload.
+        String ineligibleId = createPaste("Oracle Probe", "secret content", Visibility.UNLISTED, ExpirationPolicy.NEVER, null);
+        String missingId = "definitely-missing-" + java.util.UUID.randomUUID();
+
+        MvcResult hidden = mockMvc.perform(get("/api/v1/pastes/{id}/embed", ineligibleId))
+                .andExpect(status().isNotFound())
+                .andReturn();
+        MvcResult missing = mockMvc.perform(get("/api/v1/pastes/{id}/embed", missingId))
+                .andExpect(status().isNotFound())
+                .andReturn();
+
+        JsonNode hiddenBody = objectMapper.readTree(hidden.getResponse().getContentAsString());
+        JsonNode missingBody = objectMapper.readTree(missing.getResponse().getContentAsString());
+
+        // Every oracle-bearing field must match: a caller must not be able to tell
+        // "exists but ineligible" from "does not exist".
+        assertThat(hiddenBody.path("status").asInt()).isEqualTo(missingBody.path("status").asInt());
+        assertThat(hiddenBody.path("title").asText()).isEqualTo(missingBody.path("title").asText());
+        assertThat(hiddenBody.path("type").asText()).isEqualTo(missingBody.path("type").asText());
+        assertThat(hiddenBody.path("code").asText()).isEqualTo(missingBody.path("code").asText());
+        assertThat(hiddenBody.path("detail").asText()).isEqualTo(missingBody.path("detail").asText());
+
+        // The refusal must not describe the paste itself. Only the echoed request path
+        // may contain the id, exactly as it does for a paste that never existed.
+        assertThat(hiddenBody.path("detail").asText()).doesNotContain(ineligibleId);
+        assertThat(hiddenBody.path("instance").asText())
+                .isEqualTo("/api/v1/pastes/" + ineligibleId + "/embed");
     }
 }

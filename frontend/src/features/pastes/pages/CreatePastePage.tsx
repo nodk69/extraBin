@@ -14,6 +14,7 @@ import { PasteCreatedModal } from '../components/PasteCreatedModal';
 import { useDraftAutosave, PasteDraft } from '../hooks/useDraftAutosave';
 import { encryptPaste, type InputFile, type EncryptionMode } from '../../../lib/crypto/e2ePaste';
 import { loadPasteDefaults, loadEditorPrefs } from '../../dashboard/utils/userPreferences';
+import { resolvePublicBaseUrl } from '../lib/shareUrl';
 
 const MAX_CONTENT_BYTES = 1024 * 1024; // 1 MB strict upper bound matching server
 const MAX_HIGHLIGHT_BYTES = 250 * 1024; // 250 KB limit for live syntax tokenization
@@ -756,7 +757,7 @@ export const CreatePastePage: React.FC = () => {
   // Copy link with clipboard error handling and manual fallback (Finding B)
   const copyLink = async () => {
     if (!createdPasteId) return;
-    const url = pasteApi.buildShareableUrl(window.location.origin, createdPasteId, createdShareToken, createdLinkKey);
+    const url = pasteApi.buildShareableUrl(resolvePublicBaseUrl(), createdPasteId, createdShareToken, createdLinkKey);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url);

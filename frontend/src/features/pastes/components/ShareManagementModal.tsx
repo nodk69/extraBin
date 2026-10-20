@@ -3,6 +3,7 @@ import { RefreshCw, Slash, Copy, Check, AlertTriangle, X, Shield } from 'lucide-
 import { pasteApi } from '../api/pasteApi';
 import { ApiError } from '../../../lib/api-client/client';
 import { PasteView } from '../types/paste';
+import { resolvePublicBaseUrl } from '../lib/shareUrl';
 
 interface ShareManagementModalProps {
   paste: PasteView;
@@ -47,15 +48,17 @@ export const ShareManagementModal: React.FC<ShareManagementModalProps> = ({
   const rawKeyFragment = window.location.hash ? window.location.hash.replace(/^#key=/, '') : null;
   const isEncrypted = Boolean(paste.encryptionMode);
 
+  const publicBase = resolvePublicBaseUrl();
+
   const publicUrl = pasteApi.buildShareableUrl(
-    window.location.origin,
+    publicBase,
     paste.id,
     currentStatus === 'ACTIVE' ? currentShareToken : null,
     null
   );
 
   const encryptedAccessUrl = pasteApi.buildShareableUrl(
-    window.location.origin,
+    publicBase,
     paste.id,
     currentStatus === 'ACTIVE' ? currentShareToken : null,
     rawKeyFragment

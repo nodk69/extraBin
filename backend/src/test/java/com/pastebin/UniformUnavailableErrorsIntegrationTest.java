@@ -81,6 +81,25 @@ class UniformUnavailableErrorsIntegrationTest extends ShareTestSupport {
     }
 
     @Test
+    void fileByFileIdSurfaces_alsoReturnTheUniform404WithoutCredential() throws Exception {
+        String id = persistPaste("uniform_by_id", "By id", "secret", Visibility.PUBLIC,
+                "by-id-secret", false, null, null, java.util.List.of("main.txt"), java.util.List.of("body"));
+        long fileId = pasteRepository.findActiveByPublicIdWithFiles(id, Instant.now()).orElseThrow()
+                .getFiles().get(0).getId();
+
+        MvcResult rawById = mockMvc.perform(get("/api/v1/pastes/{id}/files/by-id/{fileId}/raw", id, fileId))
+                .andExpect(status().isNotFound())
+                .andReturn();
+        MvcResult downloadById = mockMvc.perform(get("/api/v1/pastes/{id}/files/by-id/{fileId}/download", id, fileId))
+                .andExpect(status().isNotFound())
+                .andReturn();
+
+        String missing = problem(raw("missing_uniform_by_id_9876", null).getResponse().getContentAsString());
+        assertThat(problem(rawById.getResponse().getContentAsString())).isEqualTo(missing);
+        assertThat(problem(downloadById.getResponse().getContentAsString())).isEqualTo(missing);
+    }
+
+    @Test
     void wrongPassword_remainsDistinguishable401() throws Exception {
         String password = persistPaste("uniform_wrong", "Password", "secret",
                 Visibility.PUBLIC, "uniform-secret", false, null, null, null, null);

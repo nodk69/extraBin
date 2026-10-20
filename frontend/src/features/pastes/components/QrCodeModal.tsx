@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import QRCode from 'qrcode';
 import { Icon } from '../../../components/ui/PaperIcon';
+import { buildCanonicalShareUrl, resolvePublicBaseUrl } from '../lib/shareUrl';
 
 interface QrCodeModalProps {
   isOpen: boolean;
@@ -20,10 +21,11 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({
   const [qrError, setQrError] = useState<string | null>(null);
 
   const canonicalUrl = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      return `${window.location.origin}/p/${pasteId}`;
+    const base = resolvePublicBaseUrl();
+    if (!base) {
+      return `/p/${pasteId}`;
     }
-    return `/p/${pasteId}`;
+    return buildCanonicalShareUrl({ baseUrl: base, pasteId });
   }, [pasteId]);
 
   useEffect(() => {

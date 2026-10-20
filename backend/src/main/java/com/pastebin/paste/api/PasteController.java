@@ -207,6 +207,32 @@ public class PasteController {
                 .body(response);
     }
 
+    @GetMapping("/{id}/share")
+    @Operation(summary = "Get share descriptor for a paste", description = "Returns canonical URLs and metadata for sharing.")
+    public ResponseEntity<com.pastebin.paste.api.dto.ShareDescriptorResponse> getShareDescriptor(
+            @PathVariable("id") String id,
+            @RequestParam(value = "token", required = false) String tokenParam,
+            @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
+            @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
+            @AuthenticationPrincipal Object principal,
+            HttpServletRequest httpRequest,
+            jakarta.servlet.http.HttpServletResponse httpResponse
+    ) {
+        Long authenticatedUserId = extractUserId(principal);
+        String clientIp = clientIpResolver.resolveClientIp(httpRequest);
+        String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
+
+        com.pastebin.paste.api.dto.ShareDescriptorResponse response =
+                pasteService.getShareDescriptor(id, authenticatedUserId, password, clientIp, shareToken, unlockToken);
+
+        com.pastebin.shared.http.VaryHeader.write(httpResponse, com.pastebin.shared.http.VaryHeader.CREDENTIALS);
+
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "private, no-cache, no-store, must-revalidate")
+                .body(response);
+    }
+
     @PostMapping("/{id}/delete-anonymous")
     @Operation(summary = "Delete an anonymous paste", description = "Deletes an anonymous paste using the one-time secret capability.")
     public ResponseEntity<Void> deleteAnonymousPaste(

@@ -8,7 +8,8 @@ public record PasteFileRequest(
         @Size(max = 255, message = "Filename must not exceed 255 characters")
         String filename,
 
-        @NotBlank(message = "File content must not be blank")
+        // Null/missing content is rejected by PasteService; an empty string is a valid
+        // zero-byte file and is intentionally not constrained here.
         String content,
 
         @Size(max = 50, message = "Language must not exceed 50 characters")

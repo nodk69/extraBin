@@ -21,6 +21,17 @@ export interface LoadingProps {
   icon?: 'spark' | 'loader' | 'dot';
   /** Additional CSS class names */
   className?: string;
+  /**
+   * Expose the indicator as an ARIA `status` live region.
+   *
+   * A page that owns a single status region for outcome announcements (the
+   * paste view announces clipboard and download results there) turns this off
+   * for nested loading indicators: two competing `status` regions force
+   * assistive technology — and every test that queries the page status — to
+   * guess which one carries the message. The text stays announced through
+   * `aria-live` in that case.
+   */
+  announce?: boolean;
 }
 
 export const Loading: React.FC<LoadingProps> = ({
@@ -30,8 +41,17 @@ export const Loading: React.FC<LoadingProps> = ({
   size = 'md',
   icon = 'spark',
   className = '',
+  announce = true,
 }) => {
   const iconPixelSize = size === 'lg' ? 32 : size === 'sm' ? 16 : 24;
+
+  const liveProps: {
+    role?: 'status';
+    'aria-live'?: 'polite';
+    'aria-busy'?: boolean;
+  } = announce
+    ? { role: 'status', 'aria-live': 'polite' }
+    : { 'aria-live': 'polite', 'aria-busy': true };
 
   const renderIcon = () => {
     if (icon === 'loader') {
@@ -54,8 +74,7 @@ export const Loading: React.FC<LoadingProps> = ({
   if (variant === 'minimal') {
     return (
       <div
-        role="status"
-        aria-live="polite"
+        {...liveProps}
         className={`inline-flex items-center justify-center ${className}`}
       >
         {renderIcon()}
@@ -67,8 +86,7 @@ export const Loading: React.FC<LoadingProps> = ({
   if (variant === 'inline') {
     return (
       <div
-        role="status"
-        aria-live="polite"
+        {...liveProps}
         className={`inline-flex items-center gap-2 font-mono text-xs text-[#74786f] ${className}`}
       >
         {renderIcon()}
@@ -80,8 +98,7 @@ export const Loading: React.FC<LoadingProps> = ({
   if (variant === 'card') {
     return (
       <div
-        role="status"
-        aria-live="polite"
+        {...liveProps}
         className={`account-table-card p-12 sm:p-16 text-center flex flex-col items-center justify-center gap-3 ${className}`}
       >
         {renderIcon()}
@@ -102,8 +119,7 @@ export const Loading: React.FC<LoadingProps> = ({
   // Default: 'page'
   return (
     <div
-      role="status"
-      aria-live="polite"
+      {...liveProps}
       className={`workspace flex flex-col items-center justify-center min-h-[50vh] gap-3 text-center ${className}`}
     >
       {renderIcon()}

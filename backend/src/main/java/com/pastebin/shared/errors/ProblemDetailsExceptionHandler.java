@@ -30,7 +30,7 @@ public class ProblemDetailsExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ProblemDetailsExceptionHandler.class);
 
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ProblemDetail> handleAppException(AppException ex, HttpServletRequest request) {
+    public ResponseEntity<ProblemDetail> handleAppException(AppException ex, HttpServletRequest request, HttpServletResponse response) {
         log.warn("Application exception: [{}] {}", ex.getErrorCode(), ex.getMessage());
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
@@ -47,7 +47,8 @@ public class ProblemDetailsExceptionHandler {
 
         if (ex.getStatus() == HttpStatus.NOT_FOUND || request.getRequestURI().startsWith("/api/v1/pastes")) {
             headers.set(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate");
-            headers.set(HttpHeaders.VARY, "X-Share-Token, X-Paste-Password, X-Paste-Unlock, Cookie");
+            headers.set("X-Robots-Tag", "noindex, nofollow");
+            com.pastebin.shared.http.VaryHeader.write(response, com.pastebin.shared.http.VaryHeader.CREDENTIALS);
         }
 
         return new ResponseEntity<>(problem, headers, ex.getStatus());

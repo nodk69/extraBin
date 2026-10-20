@@ -32,6 +32,8 @@ ExtraBin provides developer-first text and code sharing with cryptographic priva
   Browse and search the public snippet registry with tag/language filters, time windows, sorting, and a real most-saved ranking.
 - **[Public Author Profiles](author-profiles.md)**
   Follow public paste attribution to a privacy-minimal profile with real aggregates and paginated eligible public work.
+- **[Sharing a Paste](sharing.md)**
+  One canonical share URL per paste, a primary **Copy link** action, a keyboard-operable **Share** menu, and honest clipboard feedback.
 
 ---
 

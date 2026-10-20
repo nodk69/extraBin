@@ -585,7 +585,7 @@ export const PasteRepliesSection: React.FC<PasteRepliesSectionProps> = ({ paste 
       {/* Replies List */}
       {loading ? (
         <div className="py-12 flex justify-center">
-          <Loading variant="inline" message="Loading discussion..." />
+          <Loading variant="inline" message="Loading discussion..." announce={false} />
         </div>
       ) : replies.length === 0 ? (
         /* Empty State */

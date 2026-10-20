@@ -187,6 +187,39 @@ class UnlockTokenIntegrationTest extends ShareTestSupport {
     }
 
     @Test
+    void unlockToken_withForeignPurpose_isRejected() throws Exception {
+        String id = passwordPaste();
+        String foreign = signToken("share", id, java.time.Instant.now().plusSeconds(300), "127.0.0.1");
+
+        mockMvc.perform(get("/api/v1/pastes/{id}/raw", id).header("X-Paste-Unlock", foreign))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void unlockToken_inQueryParameter_isIgnored() throws Exception {
+        String id = passwordPaste();
+        String token = unlock(id, PASSWORD, null);
+
+        mockMvc.perform(get("/api/v1/pastes/{id}/raw", id).param("unlockToken", token))
+                .andExpect(status().isNotFound());
+    }
+
+    /** Mints a correctly signed token for an arbitrary purpose, using the configured test key. */
+    private String signToken(String purpose, String pasteId, java.time.Instant expiresAt, String ip) throws Exception {
+        String payload = purpose + ":" + pasteId + ":" + expiresAt.getEpochSecond() + ":" + ip;
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec(
+                "phase2-test-unlock-secret-at-least-32-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "HmacSHA256"));
+        String signature = java.util.HexFormat.of().formatHex(
+                mac.doFinal(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        String encoded = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return "v1." + encoded + "." + signature;
+    }
+
+    @Test
     void unlock_responseDoesNotEchoPassword() throws Exception {
         String id = passwordPaste();
         MvcResult result = mockMvc.perform(post("/api/v1/pastes/{id}/unlock", id)

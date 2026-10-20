@@ -18,10 +18,28 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * The SPA double-submit CSRF flow is verified on a freshly built context on purpose.
+ *
+ * <p>spring-security-test's {@code csrf()} post-processor mutates the <em>shared</em>
+ * {@code CsrfFilter} bean of the application context: it reflectively replaces the
+ * production {@code CookieCsrfTokenRepository} with a session-backed
+ * {@code TestCsrfTokenRepository} (see
+ * {@code SecurityMockMvcRequestPostProcessors$CsrfRequestPostProcessor}). Once any other
+ * test class in the same JVM has used {@code .with(csrf())}, the context stops emitting
+ * the {@code XSRF-TOKEN} cookie and this browser flow can no longer be observed. The
+ * production behaviour itself is unaffected: with a pristine context the GET sets the
+ * cookie and the echoed header authorises the mutation.
+ *
+ * <p>{@code classMode = BEFORE_CLASS} therefore gives this class its own context whose
+ * CSRF filter still uses the production cookie repository, which makes the test
+ * independent of the class execution order.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@org.springframework.test.annotation.DirtiesContext
+@org.springframework.test.annotation.DirtiesContext(
+        classMode = org.springframework.test.annotation.DirtiesContext.ClassMode.BEFORE_CLASS)
 class CsrfProtectionIntegrationTest {
 
     @Autowired

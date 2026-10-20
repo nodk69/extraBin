@@ -47,6 +47,12 @@ import { LANGUAGES } from '../components/CreatePasteForm';
 import { renderSafeSyntaxHighlight } from '../../../lib/syntax/highlighter';
 import { decryptPaste, type DecryptedFile, type EncryptedPasteViewDTO } from '../../../lib/crypto/e2ePaste';
 import { detectLanguageFromFilename } from './CreatePastePage';
+import {
+  buildCanonicalShareUrl,
+  buildMarkdownShareLink,
+  extractKeyFragment,
+  resolvePublicBaseUrl,
+} from '../lib/shareUrl';
 
 export interface ViewPastePageProps {
   initialPaste?: PasteView;
@@ -69,6 +75,12 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
   const [wrapLines, setWrapLines] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+
+  // Single live region for clipboard / download feedback. Only one message is
+  // ever shown, so assistive technology announces one outcome at a time.
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isDownloadingFile, setIsDownloadingFile] = useState(false);
 
   // Reaction Toast Notification (e.g. Sign in to star pastes)
   const [reactionNotice, setReactionNotice] = useState<string | null>(null);
@@ -166,6 +178,20 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
   const isDirtyRef = useRef(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const overflowMenuRef = useRef<HTMLDivElement>(null);
+  const overflowMenuPanelRef = useRef<HTMLDivElement>(null);
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
+  const shareMenuPanelRef = useRef<HTMLDivElement>(null);
+  const shareTriggerRef = useRef<HTMLButtonElement>(null);
+  const overflowOpenRef = useRef(false);
+  const shareOpenRef = useRef(false);
+  // Index of the focused item inside the open menus, so arrow navigation keeps
+  // working even when the browser focus has not settled on an item yet.
+  const overflowMenuIndexRef = useRef(0);
+  const shareMenuIndexRef = useRef(0);
+  // Monotonic request id: a slow response for a paste the user already left
+  // must never overwrite the paste that is currently routed.
+  const requestSeqRef = useRef(0);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -221,9 +247,13 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
     setError(null);
     const skipCount = hasRecentlyViewed(pasteId);
     const tokenToUse = currentToken !== undefined ? (currentToken || undefined) : (shareToken || undefined);
+    // Every load gets a sequence number; only the newest one may write state.
+    const requestId = ++requestSeqRef.current;
+    const isCurrentRequest = () => requestId === requestSeqRef.current;
     pasteApi
       .getPaste(pasteId, undefined, skipCount, tokenToUse)
       .then((data) => {
+        if (!isCurrentRequest()) return;
         setPaste(data);
         if (data.shareToken) {
           setShareToken(data.shareToken);
@@ -259,13 +289,18 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
         }
       })
       .catch((err: unknown) => {
+        if (!isCurrentRequest()) return;
         if (err instanceof ApiError && err.status === 404) {
           setError('This paste does not exist, has expired, or was already consumed.');
+        } else if (err instanceof ApiError && err.status === 429) {
+          setError('Too many attempts. Try again later.');
         } else {
           setError('Failed to load paste. Please check your connection.');
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isCurrentRequest()) setLoading(false);
+      });
   };
 
   const handleManualDecrypt = async (e: React.FormEvent) => {
@@ -327,6 +362,12 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
     }
   }, [id, location.search]);
 
+  // Keep the document title in sync with the paste that is on screen.
+  useEffect(() => {
+    if (!paste) return;
+    document.title = paste.title ? `${paste.title} · extraBin` : 'extraBin';
+  }, [paste?.id, paste?.title]);
+
   useEffect(() => {
     setPasteTags([]);
     setTagError(null);
@@ -383,13 +424,25 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
         if (manualCopyText !== null) {
           setManualCopyText(null);
         }
-        setShowOverflowMenu(false);
+        if (overflowOpenRef.current) {
+          overflowOpenRef.current = false;
+          setShowOverflowMenu(false);
+          overflowTriggerRef.current?.focus();
+        }
+        if (shareOpenRef.current) {
+          shareOpenRef.current = false;
+          setShowShareMenu(false);
+          shareTriggerRef.current?.focus();
+        }
       }
     };
 
     const handleClickOutside = (e: MouseEvent) => {
       if (overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node)) {
         setShowOverflowMenu(false);
+      }
+      if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
+        setShowShareMenu(false);
       }
     };
 
@@ -400,6 +453,14 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [manualCopyText]);
+
+  useEffect(() => {
+    overflowOpenRef.current = showOverflowMenu;
+  }, [showOverflowMenu]);
+
+  useEffect(() => {
+    shareOpenRef.current = showShareMenu;
+  }, [showShareMenu]);
 
   const files = useMemo<PasteFileItem[]>(() => {
     if (isEditing && workspaceDraftFiles.length > 0) {
@@ -509,6 +570,9 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
   };
 
   const isMultiFile = files.length > 1;
+  // A view-once paste is destroyed on the server the moment it is read, so the
+  // browser is the only place that still holds the bytes.
+  const isViewOnceConsumed = Boolean(paste?.viewOnce || paste?.burnAfterReading);
   const rawUrl = id && currentActiveFile
     ? currentActiveFile.id !== undefined
       ? pasteApi.getRawFileByIdUrl(id, currentActiveFile.id, shareToken || undefined)
@@ -588,7 +652,65 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
         // Fall back to modal
       }
     }
+    // Never claim success when the clipboard was refused: announce the failure
+    // and hand the text over for a manual copy.
+    setStatusMessage('Could not copy — your browser blocked the clipboard. Copy the text manually.');
     setManualCopyText(text);
+  };
+
+  const announceStatus = (message: string) => {
+    setStatusMessage(message);
+    setTimeout(() => {
+      setStatusMessage((prev) => (prev === message ? null : prev));
+    }, 2500);
+  };
+
+  /**
+   * The canonical share URL of the paste that is on screen.
+   *
+   * Only four parts may ever appear: the public base, the paste path, the file
+   * segment of a selected file, and — for UNLISTED pastes only — the share
+   * token. The end-to-end key stays in the fragment, and passwords, unlock
+   * tokens and deletion capabilities are never part of a share URL.
+   */
+  /**
+   * The share token of the paste on screen — only for UNLISTED pastes.
+   *
+   * A public or private paste must never carry a token: a stale `?token=` in
+   * the address bar is not a capability of this paste and must not leak into
+   * a link that is handed to somebody else.
+   */
+  const shareTokenForPaste = (): string | null => {
+    if (paste?.visibility !== 'UNLISTED') return null;
+    if (shareToken) return shareToken;
+    if (paste?.shareToken) return paste.shareToken;
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('token') || null;
+  };
+
+  const buildShareUrl = (): string => {
+    const pasteId = paste?.id || id;
+    const sharedFileId = fileId && activeFile && activeFile.id !== undefined ? activeFile.id : null;
+    return buildCanonicalShareUrl({
+      baseUrl: resolvePublicBaseUrl(),
+      pasteId,
+      fileId: sharedFileId,
+      token: shareTokenForPaste(),
+      keyFragment: extractKeyFragment(typeof window !== 'undefined' ? window.location.hash : null),
+    });
+  };
+
+  const handleCopyShareLink = async () => {
+    const url = buildShareUrl();
+    setShowShareMenu(false);
+    await copyToClipboard(url, () => announceStatus('Link copied!'));
+  };
+
+  const handleCopyMarkdownLink = async () => {
+    const url = buildShareUrl();
+    const markdown = buildMarkdownShareLink(paste?.title || paste?.id || 'Paste', url);
+    setShowShareMenu(false);
+    await copyToClipboard(markdown, () => announceStatus('Markdown URL copied to clipboard.'));
   };
 
   const handleCopyContent = async () => {
@@ -603,48 +725,173 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
 
   const handleCopyFileLink = async () => {
     if (!paste || !currentActiveFile) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    const token = searchParams.get('token');
     const targetFileId = currentActiveFile.id !== undefined ? String(currentActiveFile.id) : (isMultiFile ? currentActiveFile.filename : 'default');
-    let url = `${window.location.origin}/p/${paste.id}/file/${encodeURIComponent(targetFileId)}`;
-    if (token) {
-      url += `?token=${encodeURIComponent(token)}`;
-    }
+    const url = buildCanonicalShareUrl({
+      baseUrl: resolvePublicBaseUrl(),
+      pasteId: paste.id,
+      fileId: targetFileId,
+      token: shareTokenForPaste(),
+    });
     await copyToClipboard(url, () => {
       setIsLinkCopied(true);
       setTimeout(() => setIsLinkCopied(false), 2000);
     });
   };
 
+  /** Menu keyboard support: arrow / home / end navigation, Escape to close. */
+  const focusableMenuItems = (container: HTMLElement | null): HTMLElement[] => {
+    if (!container) return [];
+    return Array.from(
+      container.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
+    ).filter((element) => element.tagName !== 'A' || element.hasAttribute('href'));
+  };
+
+  const navigateMenu = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+    panel: HTMLElement | null,
+    indexRef: React.MutableRefObject<number>,
+    close: () => void,
+    trigger: React.RefObject<HTMLButtonElement>
+  ) => {
+    const items = focusableMenuItems(panel);
+    if (items.length === 0) return;
+
+    const activeIndex = items.indexOf(document.activeElement as HTMLElement);
+    const currentIndex = activeIndex >= 0 ? activeIndex : Math.min(indexRef.current, items.length - 1);
+    let nextIndex = -1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        nextIndex = (currentIndex + 1) % items.length;
+        break;
+      case 'ArrowUp':
+        nextIndex = (currentIndex - 1 + items.length) % items.length;
+        break;
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = items.length - 1;
+        break;
+      case 'Escape':
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+        trigger.current?.focus();
+        return;
+      default:
+        return;
+    }
+
+    e.preventDefault();
+    indexRef.current = nextIndex;
+    items[nextIndex]?.focus();
+  };
+
+  const closeOverflowMenu = () => {
+    overflowOpenRef.current = false;
+    setShowOverflowMenu(false);
+  };
+
+  const closeShareMenu = () => {
+    shareOpenRef.current = false;
+    setShowShareMenu(false);
+  };
+
+  // Move focus into the overflow menu as soon as it opens.
+  useEffect(() => {
+    if (!showOverflowMenu) return;
+    const items = focusableMenuItems(overflowMenuPanelRef.current);
+    overflowMenuIndexRef.current = 0;
+    items[0]?.focus();
+  }, [showOverflowMenu]);
+
+  // Move focus into the share menu as soon as it opens.
+  useEffect(() => {
+    if (!showShareMenu) return;
+    const items = focusableMenuItems(shareMenuPanelRef.current);
+    shareMenuIndexRef.current = 0;
+    items[0]?.focus();
+  }, [showShareMenu]);
+
   const handleCopyLineLink = async () => {
     if (!paste || !currentActiveFile || !activeLine) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    const token = searchParams.get('token');
     const targetFileId = currentActiveFile.id !== undefined ? String(currentActiveFile.id) : (isMultiFile ? currentActiveFile.filename : 'default');
-    let url = `${window.location.origin}/p/${paste.id}/file/${encodeURIComponent(targetFileId)}`;
-    if (token) {
-      url += `?token=${encodeURIComponent(token)}`;
-    }
-    url += `#L${activeLine}`;
+    const url = `${buildCanonicalShareUrl({
+      baseUrl: resolvePublicBaseUrl(),
+      pasteId: paste.id,
+      fileId: targetFileId,
+      token: shareTokenForPaste(),
+    })}#L${activeLine}`;
     await copyToClipboard(url, () => {
       setIsLineLinkCopied(true);
       setTimeout(() => setIsLineLinkCopied(false), 2000);
     });
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
-    if ((enteredPassword || paste?.burnAfterReading || paste?.viewOnce) && currentActiveFile.content !== undefined) {
-      e.preventDefault();
-      const blob = new Blob([currentActiveFile.content], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = currentActiveFile.filename || 'snippet.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'snippet.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Downloads the active file.
+   *
+   * Three transports, in order of authority:
+   *  - a protected paste is served by the server, because the browser only
+   *    ever holds the decrypted view and never the persisted bytes;
+   *  - a consumed view-once paste only exists in this browser tab, so the
+   *    in-memory bytes are the only copy left;
+   *  - an ordinary paste is served by the download endpoint.
+   */
+  const performDownload = async () => {
+    if (!paste || !currentActiveFile) return;
+    const fileId = currentActiveFile.id;
+    const tokenToUse = shareToken || undefined;
+
+    if (enteredPassword && fileId !== undefined) {
+      setIsDownloadingFile(true);
+      try {
+        const blob = await pasteApi.downloadFile(paste.id, fileId, enteredPassword, tokenToUse);
+        triggerBlobDownload(blob, currentActiveFile.filename);
+        announceStatus('Download started.');
+      } catch (err) {
+        console.error('Failed to download file', err);
+        announceStatus('Download failed: the server refused to return the file.');
+      } finally {
+        setIsDownloadingFile(false);
+      }
+      return;
     }
+
+    if (isViewOnceConsumed && currentActiveFile.content !== undefined) {
+      triggerBlobDownload(
+        new Blob([currentActiveFile.content], { type: 'text/plain;charset=utf-8' }),
+        currentActiveFile.filename
+      );
+      return;
+    }
+
+    const anchor = document.createElement('a');
+    anchor.href = downloadUrl;
+    anchor.download = currentActiveFile.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+    if (!paste || !currentActiveFile) return;
+    // An ordinary paste is downloaded by the toolbar anchor itself.
+    if (!enteredPassword && !isViewOnceConsumed) return;
+    e.preventDefault();
+    void performDownload();
   };
 
   const handleDownloadZip = async (e: React.MouseEvent) => {
@@ -673,13 +920,42 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
     }
   };
 
-  const handleOpenRaw = (e: React.MouseEvent) => {
-    if ((enteredPassword || paste?.burnAfterReading || paste?.viewOnce) && currentActiveFile.content !== undefined) {
-      e.preventDefault();
-      const blob = new Blob([currentActiveFile.content], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+  /**
+   * Opens the raw bytes of the active file. Mirrors {@link performDownload}:
+   * protected pastes are served by the server, consumed view-once pastes come
+   * from this browser tab, everything else from the raw endpoint.
+   */
+  const performRaw = async () => {
+    if (!paste || !currentActiveFile) return;
+    const fileId = currentActiveFile.id;
+    const tokenToUse = shareToken || undefined;
+
+    if (enteredPassword && fileId !== undefined) {
+      try {
+        const blob = await pasteApi.getRawBlob(paste.id, fileId, enteredPassword, tokenToUse);
+        window.open(URL.createObjectURL(blob), '_blank');
+      } catch (err) {
+        console.error('Failed to open raw content', err);
+        announceStatus('Could not open the raw content: the server refused the request.');
+      }
+      return;
     }
+
+    if (isViewOnceConsumed && currentActiveFile.content !== undefined) {
+      const blob = new Blob([currentActiveFile.content], { type: 'text/plain;charset=utf-8' });
+      window.open(URL.createObjectURL(blob), '_blank');
+      return;
+    }
+
+    window.open(rawUrl, '_blank');
+  };
+
+  const handleOpenRaw = (e: React.MouseEvent) => {
+    if (!paste || !currentActiveFile) return;
+    // An ordinary paste is opened by the overflow anchor itself.
+    if (!enteredPassword && !isViewOnceConsumed) return;
+    e.preventDefault();
+    void performRaw();
   };
 
   const handleCopyApiUrl = async (ext: string) => {
@@ -1243,6 +1519,29 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
               </>
             )}
           </div>
+
+          {/* Visibility Explanation */}
+          <div className="text-xs text-[#555a53] font-mono">
+            {paste.visibility === 'PUBLIC' && (
+              <span>Public paste: discoverable by the community in live feeds and search.</span>
+            )}
+            {paste.visibility === 'UNLISTED' && (
+              <span>Unlisted paste: hidden from discovery; accessible only to anyone with the link.</span>
+            )}
+            {paste.visibility === 'PRIVATE' && (
+              <span>Private paste: restricted strictly to your account; only you can view this.</span>
+            )}
+          </div>
+          {/* Single live region for clipboard / download feedback */}
+          {statusMessage && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="text-xs font-mono font-semibold text-[#17201d]"
+            >
+              {statusMessage}
+            </div>
+          )}
           {/* Reaction Notice / Toast */}
           {reactionNotice && (
             <div
@@ -1322,6 +1621,105 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
             />
             <span data-testid="paste-stars-count">{paste.starsCount ?? 0}</span>
           </button>
+          {/* Primary sharing action: copies the canonical share URL */}
+          <button
+            type="button"
+            className="action-btn action-btn-primary"
+            onClick={handleCopyShareLink}
+            aria-label="Copy link"
+            title="Copy the canonical link to this paste"
+          >
+            <LinkIcon className="w-3.5 h-3.5" />
+            <span>Copy link</span>
+          </button>
+
+          {/* Share menu: every way to hand this paste on */}
+          <div className="relative" ref={shareMenuRef}>
+            <button
+              type="button"
+              ref={shareTriggerRef}
+              className={`action-btn ${showShareMenu ? 'border-[#17201d] bg-[#faf8f2]' : ''}`}
+              onClick={() => setShowShareMenu(!showShareMenu)}
+              aria-label="Share"
+              aria-haspopup="true"
+              aria-expanded={showShareMenu}
+              title="Share this paste"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share</span>
+            </button>
+
+            {showShareMenu && (
+              <div
+                role="menu"
+                aria-label="Share options"
+                ref={shareMenuPanelRef}
+                onKeyDown={(e) =>
+                  navigateMenu(e, shareMenuPanelRef.current, shareMenuIndexRef, closeShareMenu, shareTriggerRef)
+                }
+                className="absolute right-0 top-full mt-1.5 w-60 rounded-xl border border-[#17201d] bg-[#faf8f2] shadow-[4px_4px_0_#d5d0c5] py-1.5 z-50 font-mono text-xs text-[#17201d]"
+              >
+                {paste.visibility === 'PRIVATE' ? (
+                  <p className="px-3 py-2 text-[#555a53] leading-relaxed">
+                    Private paste: there is no public link. Only you can open this paste.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      closeShareMenu();
+                      void handleCopyShareLink();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#ebe7dc] transition-colors text-left"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5 text-[#74776f]" />
+                    <span>Copy share link</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeShareMenu();
+                    void performRaw();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#ebe7dc] transition-colors text-left"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#74776f]" />
+                  <span>Raw {currentActiveFile.filename}</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeShareMenu();
+                    void performDownload();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#ebe7dc] transition-colors text-left"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#74776f]" />
+                  <span>Download {currentActiveFile.filename}</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeShareMenu();
+                    void handleCopyMarkdownLink();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#ebe7dc] transition-colors text-left"
+                >
+                  <Code className="w-3.5 h-3.5 text-[#74776f]" />
+                  <span>Markdown link</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* 1. Primary Copy File Content Button */}
           <button
             type="button"
@@ -1394,7 +1792,14 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
               type="button"
               className="action-btn"
               onClick={handleDownload}
-              title={isMultiFile ? `Download ${currentActiveFile.filename}` : 'Download file'}
+              disabled={isDownloadingFile}
+              title={
+                isViewOnceConsumed
+                  ? 'Download the in-memory copy — the server copy of this view-once paste was already consumed'
+                  : isMultiFile
+                  ? `Download ${currentActiveFile.filename}`
+                  : 'Download file'
+              }
             >
               <Download className="w-3.5 h-3.5" />
               <span>{isMultiFile ? `Download ${currentActiveFile.filename}` : 'Download file'}</span>
@@ -1410,6 +1815,12 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
               <Download className="w-3.5 h-3.5" />
               <span>{isMultiFile ? `Download ${currentActiveFile.filename}` : 'Download file'}</span>
             </a>
+          )}
+          {isViewOnceConsumed && (
+            <span className="text-[11px] font-mono text-[#74776f] leading-relaxed">
+              Server download unavailable — this view-once paste was already consumed; only the copy held in
+              this browser can be downloaded.
+            </span>
           )}
 
           {/* 5. Download ZIP (for multi-file pastes) */}
@@ -1440,6 +1851,7 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
           <div className="relative" ref={overflowMenuRef}>
             <button
               type="button"
+              ref={overflowTriggerRef}
               className={`action-btn ${showOverflowMenu ? 'border-[#17201d] bg-[#faf8f2]' : ''}`}
               onClick={() => setShowOverflowMenu(!showOverflowMenu)}
               aria-label="More actions"
@@ -1455,6 +1867,10 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
               <div
                 role="menu"
                 aria-label="Secondary actions"
+                ref={overflowMenuPanelRef}
+                onKeyDown={(e) =>
+                  navigateMenu(e, overflowMenuPanelRef.current, overflowMenuIndexRef, closeOverflowMenu, overflowTriggerRef)
+                }
                 className="absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-[#17201d] bg-[#faf8f2] shadow-[4px_4px_0_#d5d0c5] py-1.5 z-50 font-mono text-xs text-[#17201d]"
               >
                 {/* Wrap Lines Option */}
@@ -1484,7 +1900,7 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
                   className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#ebe7dc] transition-colors text-inherit no-underline"
                 >
                   <FileText className="w-3.5 h-3.5 text-[#74776f]" />
-                  <span>Raw {isMultiFile ? currentActiveFile.filename : 'Content'}</span>
+                  <span>Raw {currentActiveFile.filename}</span>
                 </a>
 
                 {/* Embed Option */}
