@@ -85,6 +85,7 @@ public class PasteController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @RequestHeader(value = "X-Skip-View-Count", required = false) Boolean skipViewCount,
             @RequestParam(value = "skipViewCount", required = false) Boolean skipViewCountParam,
             @AuthenticationPrincipal Object principal,
@@ -101,7 +102,7 @@ public class PasteController {
         }
 
         boolean shouldSkip = Boolean.TRUE.equals(skipViewCount) || Boolean.TRUE.equals(skipViewCountParam) || sessionAlreadyViewed;
-        PasteViewResponse response = pasteService.getPasteView(id, authenticatedUserId, password, clientIp, shouldSkip, shareToken);
+        PasteViewResponse response = pasteService.getPasteView(id, authenticatedUserId, password, clientIp, shouldSkip, shareToken, unlockToken);
 
         if (!shouldSkip && !response.passwordRequired() && !response.viewOnce()) {
             var activeSession = httpRequest.getSession(true);
@@ -121,8 +122,26 @@ public class PasteController {
 
         return ResponseEntity.ok()
                 .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, cacheControl)
-                .header(org.springframework.http.HttpHeaders.VARY, "X-Share-Token, X-Paste-Password, Cookie")
+                .header(org.springframework.http.HttpHeaders.VARY, "X-Share-Token, X-Paste-Password, X-Paste-Unlock, Cookie")
                 .body(response);
+    }
+
+    @PostMapping("/{id}/unlock")
+    @Operation(summary = "Unlock a password-protected paste", description = "Validates the password and returns a short-lived, IP-bound unlock token.")
+    public ResponseEntity<com.pastebin.paste.api.dto.UnlockResponse> unlockPaste(
+            @PathVariable("id") String id,
+            @RequestBody(required = false) com.pastebin.paste.api.dto.UnlockRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        String clientIp = clientIpResolver.resolveClientIp(httpRequest);
+        String password = (request != null) ? request.password() : null;
+
+        PasteService.UnlockGrant grant = pasteService.unlockPaste(id, password, clientIp);
+
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "private, no-cache, no-store, must-revalidate")
+                .header(org.springframework.http.HttpHeaders.VARY, "X-Paste-Password")
+                .body(new com.pastebin.paste.api.dto.UnlockResponse(grant.unlockToken(), grant.expiresAt()));
     }
 
     @PostMapping("/{id}/revoke-link")

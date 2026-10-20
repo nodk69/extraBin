@@ -190,9 +190,9 @@ class PasteSecurityIntegrationTest {
                         .header("X-Paste-Password", "wrong-password"))
                 .andExpect(status().isUnauthorized());
 
-        // 3. Raw endpoint without password: 401 Unauthorized
+        // 3. Raw endpoint without password: uniform 404, indistinguishable from a missing paste
         mockMvc.perform(get("/api/v1/pastes/" + pasteId + "/raw"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
 
         // 4. With correct password in header: returns full content
         mockMvc.perform(get("/api/v1/pastes/" + pasteId)

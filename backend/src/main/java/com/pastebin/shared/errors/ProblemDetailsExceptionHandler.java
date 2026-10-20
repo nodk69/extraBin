@@ -47,7 +47,7 @@ public class ProblemDetailsExceptionHandler {
 
         if (ex.getStatus() == HttpStatus.NOT_FOUND || request.getRequestURI().startsWith("/api/v1/pastes")) {
             headers.set(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate");
-            headers.set(HttpHeaders.VARY, "X-Share-Token, X-Paste-Password, Cookie");
+            headers.set(HttpHeaders.VARY, "X-Share-Token, X-Paste-Password, X-Paste-Unlock, Cookie");
         }
 
         return new ResponseEntity<>(problem, headers, ex.getStatus());

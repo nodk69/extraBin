@@ -3,10 +3,12 @@ package com.pastebin.paste.api;
 import com.pastebin.identity.infrastructure.PastebinUserPrincipal;
 import com.pastebin.paste.application.PasteService;
 import com.pastebin.shared.errors.ResourceNotFoundException;
+import com.pastebin.shared.http.VaryHeader;
 import com.pastebin.shared.security.ClientIpResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -58,8 +60,10 @@ public class TypedPasteApiController {
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
-            HttpServletRequest httpRequest
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
     ) {
         if (id == null || id.contains(".") || !id.matches("^[A-Za-z0-9_-]+$")) {
             throw new ResourceNotFoundException("Invalid paste id format.");
@@ -86,8 +90,11 @@ public class TypedPasteApiController {
                 authenticatedUserId,
                 password,
                 clientIp,
-                shareToken
+                shareToken,
+                unlockToken
         );
+
+        VaryHeader.write(httpResponse, VaryHeader.CREDENTIALS);
 
         if (payload.notModified()) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED)

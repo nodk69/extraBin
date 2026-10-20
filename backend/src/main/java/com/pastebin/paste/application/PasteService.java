@@ -68,6 +68,7 @@ public class PasteService {
     private final PasteVoteRepository pasteVoteRepository;
     private final PasteStarRepository pasteStarRepository;
     private final LibraryService libraryService;
+    private final UnlockTokenService unlockTokenService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     @Value("${pastebin.content.max-bytes:1048576}")
@@ -82,7 +83,8 @@ public class PasteService {
                         MeterRegistry meterRegistry,
                         PasteVoteRepository pasteVoteRepository,
                         PasteStarRepository pasteStarRepository,
-                        org.springframework.beans.factory.ObjectProvider<LibraryService> libraryService) {
+                        org.springframework.beans.factory.ObjectProvider<LibraryService> libraryService,
+                        UnlockTokenService unlockTokenService) {
         this.pasteRepository = pasteRepository;
         this.folderRepository = folderRepository;
         this.nanoIdGenerator = nanoIdGenerator;
@@ -92,6 +94,7 @@ public class PasteService {
         this.pasteVoteRepository = pasteVoteRepository;
         this.pasteStarRepository = pasteStarRepository;
         this.libraryService = libraryService.getIfAvailable();
+        this.unlockTokenService = unlockTokenService;
     }
 
     public PasteService(PasteRepository pasteRepository,
@@ -101,7 +104,7 @@ public class PasteService {
                         PasswordEncoder passwordEncoder,
                         PasteVoteRepository pasteVoteRepository,
                         PasteStarRepository pasteStarRepository) {
-        this(pasteRepository, folderRepository, nanoIdGenerator, rateLimiterService, passwordEncoder, new SimpleMeterRegistry(), pasteVoteRepository, pasteStarRepository, null);
+        this(pasteRepository, folderRepository, nanoIdGenerator, rateLimiterService, passwordEncoder, new SimpleMeterRegistry(), pasteVoteRepository, pasteStarRepository, null, null);
     }
 
     @Transactional
@@ -470,12 +473,23 @@ public class PasteService {
 
     @Transactional
     public PasteViewResponse getPasteView(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, boolean skipViewCount, String shareToken) {
+        return getPasteView(publicId, authenticatedUserId, providedPassword, clientIp, skipViewCount, shareToken, null);
+    }
+
+    @Transactional
+    public PasteViewResponse getPasteView(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, boolean skipViewCount, String shareToken, String unlockToken) {
         Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
         boolean isOwner = authenticatedUserId != null && authenticatedUserId.equals(paste.getUserId());
         boolean isViewOnce = paste.isBurnAfterReading();
         boolean isPasswordProtected = paste.isPasswordProtected();
 
-        if (isPasswordProtected) {
+        boolean unlockTokenAccepted = false;
+        if (isPasswordProtected && unlockToken != null && !unlockToken.isBlank()) {
+            var tokenResult = unlockTokenService.validateToken(unlockToken, publicId, clientIp);
+            unlockTokenAccepted = tokenResult.isPresent();
+        }
+
+        if (isPasswordProtected && !unlockTokenAccepted) {
             if (providedPassword == null || providedPassword.isBlank()) {
                 // Return masked content so password challenge modal/form can be shown
                 List<PasteFileResponse> maskedFiles = (paste.getFiles() != null)
@@ -649,8 +663,12 @@ public class PasteService {
 
     @Transactional
     public RawPayload getRawPayload(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return getRawPayload(publicId, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public RawPayload getRawPayload(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
         if (paste.isBurnAfterReading()) {
             consumeBurnAfterReadingAtomically(paste);
         }
@@ -673,8 +691,12 @@ public class PasteService {
 
     @Transactional
     public RawPayload getRawFilePayload(String publicId, String filename, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return getRawFilePayload(publicId, filename, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public RawPayload getRawFilePayload(String publicId, String filename, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
         if (paste.isBurnAfterReading()) {
             consumeBurnAfterReadingAtomically(paste);
         }
@@ -689,8 +711,12 @@ public class PasteService {
 
     @Transactional
     public RawPayload getRawFilePayloadById(String publicId, Long fileId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return getRawFilePayloadById(publicId, fileId, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public RawPayload getRawFilePayloadById(String publicId, Long fileId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
         if (paste.isBurnAfterReading()) {
             consumeBurnAfterReadingAtomically(paste);
         }
@@ -749,13 +775,24 @@ public class PasteService {
             String clientIp,
             String shareToken
     ) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
+        return getTypedPaste(publicId, ifNoneMatch, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public TypedPastePayload getTypedPaste(
+            String publicId,
+            String ifNoneMatch,
+            Long authenticatedUserId,
+            String providedPassword,
+            String clientIp,
+            String shareToken,
+            String unlockToken
+    ) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
 
         if (paste.isEncrypted()) {
             throw new ResourceNotFoundException("Paste not found or has expired.");
         }
-
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
 
         byte[] contentBytes = paste.getContent() != null ? paste.getContent().getBytes(StandardCharsets.UTF_8) : new byte[0];
 
@@ -770,7 +807,7 @@ public class PasteService {
         String cacheControl;
         if (paste.isBurnAfterReading()) {
             cacheControl = "private, no-cache, no-store, must-revalidate";
-        } else if (authenticatedUserId != null || paste.getVisibility() == Visibility.PRIVATE) {
+        } else if (authenticatedUserId != null || paste.getVisibility() == Visibility.PRIVATE || paste.isPasswordProtected()) {
             cacheControl = "private, no-store";
         } else if (paste.getVisibility() == Visibility.UNLISTED) {
             cacheControl = "private, no-cache";
@@ -813,8 +850,12 @@ public class PasteService {
 
     @Transactional
     public DownloadData getDownloadData(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return getDownloadData(publicId, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public DownloadData getDownloadData(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
         if (paste.isBurnAfterReading()) {
             consumeBurnAfterReadingAtomically(paste);
         }
@@ -855,8 +896,12 @@ public class PasteService {
 
     @Transactional
     public DownloadData getDownloadFileData(String publicId, String filename, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return getDownloadFileData(publicId, filename, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public DownloadData getDownloadFileData(String publicId, String filename, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
         if (paste.isBurnAfterReading()) {
             consumeBurnAfterReadingAtomically(paste);
         }
@@ -870,8 +915,12 @@ public class PasteService {
 
     @Transactional
     public DownloadData getDownloadFileDataById(String publicId, Long fileId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return getDownloadFileDataById(publicId, fileId, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public DownloadData getDownloadFileDataById(String publicId, Long fileId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
         if (paste.isBurnAfterReading()) {
             consumeBurnAfterReadingAtomically(paste);
         }
@@ -890,8 +939,12 @@ public class PasteService {
 
     @Transactional
     public ZipDownloadData getZipDownloadData(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
-        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return getZipDownloadData(publicId, authenticatedUserId, providedPassword, clientIp, shareToken, null);
+    }
+
+    @Transactional
+    public ZipDownloadData getZipDownloadData(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
         if (paste.isBurnAfterReading()) {
             consumeBurnAfterReadingAtomically(paste);
         }
@@ -1176,10 +1229,54 @@ public class PasteService {
         if (paste.isPasswordProtected()) {
             String ipKey = (clientIp != null && !clientIp.isBlank()) ? clientIp : "127.0.0.1";
             rateLimiterService.checkRateLimit("unlock:ip:" + ipKey + ":paste:" + publicId, 10, 900);
-            if (providedPassword == null || !passwordEncoder.matches(providedPassword.trim(), paste.getPasswordHash())) {
-                throw new UnauthorizedException("Password required to access this paste.");
+            if (providedPassword == null || providedPassword.isBlank()) {
+                throw new ResourceNotFoundException("Paste not found or has expired.");
+            }
+            if (!passwordEncoder.matches(providedPassword.trim(), paste.getPasswordHash())) {
+                throw new UnauthorizedException("Invalid password for this paste.");
             }
         }
+    }
+
+    private Paste authorizePasteAccess(String publicId, Long authenticatedUserId, String shareToken,
+                                        String providedPassword, String clientIp, String unlockToken) {
+        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
+
+        if (unlockToken != null && !unlockToken.isBlank() && paste.isPasswordProtected()) {
+            var result = unlockTokenService.validateToken(unlockToken, publicId, clientIp);
+            if (result.isPresent()) {
+                return paste;
+            }
+        }
+
+        verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
+        return paste;
+    }
+
+    public record UnlockGrant(String unlockToken, Instant expiresAt) {}
+
+    @Transactional(readOnly = true)
+    public UnlockGrant unlockPaste(String publicId, String providedPassword, String clientIp) {
+        Paste paste = pasteRepository.findActiveByPublicId(publicId, Instant.now())
+                .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
+
+        if (!paste.isPasswordProtected()) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        String ipKey = (clientIp != null && !clientIp.isBlank()) ? clientIp : "127.0.0.1";
+        rateLimiterService.checkRateLimit("unlock:ip:" + ipKey + ":paste:" + publicId, 10, 900);
+
+        if (providedPassword == null || providedPassword.isBlank()) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        if (!passwordEncoder.matches(providedPassword.trim(), paste.getPasswordHash())) {
+            throw new UnauthorizedException("Invalid password for this paste.");
+        }
+
+        UnlockTokenService.GeneratedToken generated = unlockTokenService.generateToken(publicId, clientIp);
+        return new UnlockGrant(generated.token(), generated.expiresAt());
     }
 
     /**

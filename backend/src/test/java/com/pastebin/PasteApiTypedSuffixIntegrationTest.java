@@ -597,9 +597,9 @@ public class PasteApiTypedSuffixIntegrationTest {
     void T7_2_getSuffix_doesNotServeRawPasswordHash() throws Exception {
         String id = createPaste("Password guarded content", "plaintext", Visibility.PUBLIC, ExpirationPolicy.ONE_DAY, "SecretP@ss1", null);
 
-        // GET without password must return 401 Unauthorized, never leaking password hash
+        // GET without password must return the uniform 404, never leaking password hash
         mockMvc.perform(get("/api/v1/pastes/{id}.txt", id))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isNotFound())
                 .andExpect(content().string(not(containsString("passwordHash"))));
     }
 }

@@ -88,10 +88,11 @@ class Batch2SecurityRegressionTest {
                 .andExpect(jsonPath("$.passwordRequired").value(true))
                 .andExpect(jsonPath("$.content").value(""));
 
-        // 2. Attempting with ?password= on /raw endpoint MUST FAIL (401 Unauthorized)
+        // 2. Attempting with ?password= on /raw endpoint MUST FAIL with the uniform 404 returned
+        //    whenever no usable credential accompanies the request (never a query parameter).
         mockMvc.perform(get("/api/v1/pastes/" + created.id() + "/raw")
                         .param("password", "vault-pass-42"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
 
         // 3. Providing password in X-Paste-Password header MUST SUCCEED (200 with unlocked content)
         mockMvc.perform(get("/api/v1/pastes/" + created.id())

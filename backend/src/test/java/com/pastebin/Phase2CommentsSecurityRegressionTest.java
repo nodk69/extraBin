@@ -96,7 +96,8 @@ class Phase2CommentsSecurityRegressionTest {
 
     /**
      * P2-09 (read bypass): an anonymous caller who does NOT know the paste password must not be able
-     * to read the discussion of a password-protected paste. Desired: 401-style challenge, never 200.
+     * to read the discussion of a password-protected paste. Desired: the uniform 404 used for
+     * unavailable pastes, never 200.
      */
     @Test
     void commentsOnPasswordProtectedPasteRequireThePasswordOnRead() throws Exception {
@@ -114,12 +115,13 @@ class Phase2CommentsSecurityRegressionTest {
 
         // Anonymous read without password must NOT succeed.
         mockMvc.perform(get("/api/v1/pastes/" + pasteId + "/comments"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
     }
 
     /**
      * P2-09 (write bypass): an anonymous caller without the paste password must not be able to post
-     * comments on a password-protected paste. Desired: 401, and the comment must not be persisted.
+     * comments on a password-protected paste. Desired: uniform 404, and the comment must not be
+     * persisted.
      */
     @Test
     void commentsOnPasswordProtectedPasteRequireThePasswordOnWrite() throws Exception {
@@ -129,7 +131,7 @@ class Phase2CommentsSecurityRegressionTest {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateCommentRequest("Guest Drive-By", "Anon"))))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
 
         // With the correct password the comment must be accepted.
         mockMvc.perform(post("/api/v1/pastes/" + pasteId + "/comments")

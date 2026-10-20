@@ -1,6 +1,7 @@
 package com.pastebin.paste.api;
 
 import com.pastebin.paste.application.PasteService;
+import com.pastebin.shared.http.VaryHeader;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpHeaders;
@@ -10,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 
 @RestController
@@ -32,13 +34,17 @@ public class RawContentController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
-            HttpServletRequest httpRequest
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
     ) {
         Long authenticatedUserId = extractUserId(principal);
         String clientIp = clientIpResolver.resolveClientIp(httpRequest);
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
-        PasteService.RawPayload payload = pasteService.getRawPayload(id, authenticatedUserId, password, clientIp, shareToken);
+        PasteService.RawPayload payload = pasteService.getRawPayload(id, authenticatedUserId, password, clientIp, shareToken, unlockToken);
+
+        VaryHeader.write(httpResponse, VaryHeader.CREDENTIALS, "Accept-Encoding");
 
         var responseBuilder = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
@@ -65,13 +71,14 @@ public class RawContentController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
             HttpServletRequest httpRequest
     ) {
         Long authenticatedUserId = extractUserId(principal);
         String clientIp = clientIpResolver.resolveClientIp(httpRequest);
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
-        PasteService.RawPayload payload = pasteService.getRawFilePayload(id, filename, authenticatedUserId, password, clientIp, shareToken);
+        PasteService.RawPayload payload = pasteService.getRawFilePayload(id, filename, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
         var responseBuilder = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
@@ -97,17 +104,21 @@ public class RawContentController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
-            HttpServletRequest httpRequest
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
     ) {
         Long authenticatedUserId = extractUserId(principal);
         String clientIp = clientIpResolver.resolveClientIp(httpRequest);
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
-        PasteService.DownloadData data = pasteService.getDownloadData(id, authenticatedUserId, password, clientIp, shareToken);
+        PasteService.DownloadData data = pasteService.getDownloadData(id, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
         org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
                 .filename(data.filename())
                 .build();
+
+        VaryHeader.write(httpResponse, VaryHeader.CREDENTIALS);
 
         var responseBuilder = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, cd.toString())
@@ -132,13 +143,14 @@ public class RawContentController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
             HttpServletRequest httpRequest
     ) {
         Long authenticatedUserId = extractUserId(principal);
         String clientIp = clientIpResolver.resolveClientIp(httpRequest);
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
-        PasteService.DownloadData data = pasteService.getDownloadFileData(id, filename, authenticatedUserId, password, clientIp, shareToken);
+        PasteService.DownloadData data = pasteService.getDownloadFileData(id, filename, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
         org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
                 .filename(data.filename())
@@ -165,13 +177,14 @@ public class RawContentController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
             HttpServletRequest httpRequest
     ) {
         Long authenticatedUserId = extractUserId(principal);
         String clientIp = clientIpResolver.resolveClientIp(httpRequest);
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
-        PasteService.RawPayload payload = pasteService.getRawFilePayloadById(id, fileId, authenticatedUserId, password, clientIp, shareToken);
+        PasteService.RawPayload payload = pasteService.getRawFilePayloadById(id, fileId, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
         var responseBuilder = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
@@ -198,13 +211,14 @@ public class RawContentController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
             HttpServletRequest httpRequest
     ) {
         Long authenticatedUserId = extractUserId(principal);
         String clientIp = clientIpResolver.resolveClientIp(httpRequest);
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
-        PasteService.DownloadData data = pasteService.getDownloadFileDataById(id, fileId, authenticatedUserId, password, clientIp, shareToken);
+        PasteService.DownloadData data = pasteService.getDownloadFileDataById(id, fileId, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
         org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
                 .filename(data.filename())
@@ -230,13 +244,14 @@ public class RawContentController {
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "X-Share-Token", required = false) String tokenHeader,
             @RequestHeader(value = "X-Paste-Password", required = false) String password,
+            @RequestHeader(value = "X-Paste-Unlock", required = false) String unlockToken,
             @AuthenticationPrincipal Object principal,
             HttpServletRequest httpRequest
     ) {
         Long authenticatedUserId = extractUserId(principal);
         String clientIp = clientIpResolver.resolveClientIp(httpRequest);
         String shareToken = (tokenParam != null && !tokenParam.isBlank()) ? tokenParam : tokenHeader;
-        PasteService.ZipDownloadData zipData = pasteService.getZipDownloadData(id, authenticatedUserId, password, clientIp, shareToken);
+        PasteService.ZipDownloadData zipData = pasteService.getZipDownloadData(id, authenticatedUserId, password, clientIp, shareToken, unlockToken);
 
         org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.attachment()
                 .filename(zipData.filename())

@@ -223,7 +223,8 @@ class ContentAuthorizationParityIntegrationTest {
                 Visibility.PUBLIC, ExpirationPolicy.NEVER, "Pass1234!", null);
 
         // The HTML/page view intentionally returns a masked 200 challenge; every raw/download
-        // surface must return the same 401 as the page's password verifier.
+        // surface must return the uniform 404 used for unavailable pastes, so that a request
+        // without a credential never confirms the paste exists.
         mockMvc.perform(get("/api/v1/pastes/" + paste.id()))
                 .andExpect(status().isOk())
                 .andExpect(result -> assertThat(result.getResponse().getContentAsString())
@@ -236,7 +237,7 @@ class ContentAuthorizationParityIntegrationTest {
                 "/api/v1/pastes/" + paste.id() + "/files/main.txt/raw",
                 "/api/v1/pastes/" + paste.id() + "/files/main.txt/download")) {
             mockMvc.perform(get(path))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isNotFound());
         }
 
         mockMvc.perform(get("/api/v1/pastes/" + paste.id() + "/raw")

@@ -338,15 +338,15 @@ public class PasteReactionIntegrationTest {
     // =========================================================================
 
     @Test
-    @DisplayName("BE-SEC-01: Voting on password-protected paste without password returns 401")
-    void testVoteOnPasswordProtectedPaste_WithoutPassword_Returns401() throws Exception {
+    @DisplayName("BE-SEC-01: Voting on password-protected paste without password returns uniform 404")
+    void testVoteOnPasswordProtectedPaste_WithoutPassword_Returns404() throws Exception {
         String pasteId = createPasswordProtectedPaste("secret123");
 
         mockMvc.perform(post("/api/v1/pastes/" + pasteId + "/vote")
                         .with(csrf()).with(user(principal1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"voteType\":\"UP\"}"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
     }
 
     @Test
