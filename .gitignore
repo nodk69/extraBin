@@ -6,7 +6,7 @@
 *.pem
 
 # Documentation (user requested not to push)
-docs/
+/docs/
 *.md
 DECISIONS.md
 CHANGELOG.md
