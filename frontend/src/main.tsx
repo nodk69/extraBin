@@ -27,3 +27,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>
 );
+// Trigger rebuild for env vars
