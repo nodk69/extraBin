@@ -17,6 +17,7 @@ README.md
 !/docs/DEMO_MANIFEST.md
 !backend/README.md
 !frontend/README.md
+!frontend/docs/features/*.md
 
 # IDE & Editor
 .vscode/

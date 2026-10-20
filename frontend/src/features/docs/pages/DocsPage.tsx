@@ -21,19 +21,19 @@ import {
   Tag,
   Users,
 } from 'lucide-react';
-import encryptedMarkdown from '../../../../../docs/features/encrypted-pastes.md?raw';
-import apiMarkdown from '../../../../../docs/features/paste-as-api.md?raw';
-import burnMarkdown from '../../../../../docs/features/burn-after-read.md?raw';
-import passwordMarkdown from '../../../../../docs/features/password-protected.md?raw';
-import multiFileMarkdown from '../../../../../docs/features/multi-file.md?raw';
-import foldersMarkdown from '../../../../../docs/features/folders.md?raw';
-import revisionHistoryMarkdown from '../../../../../docs/features/revision-history.md?raw';
-import responsiveEmbedsMarkdown from '../../../../../docs/features/responsive-embeds.md?raw';
-import commentsMarkdown from '../../../../../docs/features/comments-and-replies.md?raw';
-import qrCodesMarkdown from '../../../../../docs/features/qr-codes.md?raw';
-import discoveryMarkdown from '../../../../../docs/features/discovery.md?raw';
-import tagsAndLibraryMarkdown from '../../../../../docs/features/tags-and-library.md?raw';
-import authorProfilesMarkdown from '../../../../../docs/features/author-profiles.md?raw';
+import encryptedMarkdown from '../../../../docs/features/encrypted-pastes.md?raw';
+import apiMarkdown from '../../../../docs/features/paste-as-api.md?raw';
+import burnMarkdown from '../../../../docs/features/burn-after-read.md?raw';
+import passwordMarkdown from '../../../../docs/features/password-protected.md?raw';
+import multiFileMarkdown from '../../../../docs/features/multi-file.md?raw';
+import foldersMarkdown from '../../../../docs/features/folders.md?raw';
+import revisionHistoryMarkdown from '../../../../docs/features/revision-history.md?raw';
+import responsiveEmbedsMarkdown from '../../../../docs/features/responsive-embeds.md?raw';
+import commentsMarkdown from '../../../../docs/features/comments-and-replies.md?raw';
+import qrCodesMarkdown from '../../../../docs/features/qr-codes.md?raw';
+import discoveryMarkdown from '../../../../docs/features/discovery.md?raw';
+import tagsAndLibraryMarkdown from '../../../../docs/features/tags-and-library.md?raw';
+import authorProfilesMarkdown from '../../../../docs/features/author-profiles.md?raw';
 
 import { EncryptedPastesDemo } from '../demos/EncryptedPastesDemo';
 import { PasteAsApiDemo } from '../demos/PasteAsApiDemo';

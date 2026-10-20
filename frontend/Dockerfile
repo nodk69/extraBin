@@ -5,18 +5,11 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy dependency specifications
-COPY frontend/package.json frontend/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy source code
-COPY frontend/ .
-
-# Copy documentation files required for Vite ?raw imports
-# The import path ../../../../../docs/features/ from src/features/docs/pages/DocsPage.tsx
-# resolves to /docs/features/ in the container (5 levels up from pages/ reaches /)
-COPY docs/features/ /docs/features/
-
-# Produce static bundle
+# Copy source code and produce static bundle
+COPY . .
 RUN npm run build
 
 # -----------------------------------------------------------------------------

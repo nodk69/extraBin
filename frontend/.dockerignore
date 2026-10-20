@@ -29,9 +29,10 @@ test-results
 .DS_Store
 Thumbs.db
 
-# Documentation (not needed in the runtime image)
-docs
+# Documentation source (not needed in runtime image, but docs/features/ is required for build)
+# We keep docs/features/ for Vite ?raw imports, but exclude other markdown files
 *.md
+!docs/features/*.md
 LICENSE
 
 # CI configuration
