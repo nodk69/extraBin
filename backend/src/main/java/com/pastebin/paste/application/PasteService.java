@@ -1468,10 +1468,10 @@ public class PasteService {
                                         String providedPassword, String clientIp, String unlockToken) {
         Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
 
-        if (unlockToken != null && !unlockToken.isBlank() && paste.isPasswordProtected()
-                && unlockTokenService != null) {
-            var result = unlockTokenService.validateToken(unlockToken, publicId, clientIp);
-            if (result.isPresent()) {
+        if (paste.isPasswordProtected() && unlockToken != null && !unlockToken.isBlank()) {
+            Optional<UnlockTokenService.UnlockTokenPayload> payload =
+                    unlockTokenService.validateToken(unlockToken, publicId, clientIp);
+            if (payload.isPresent()) {
                 return paste;
             }
         }
