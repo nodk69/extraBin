@@ -61,7 +61,7 @@ server {
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
         add_header Strict-Transport-Security $hsts_header always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://storage.ko-fi.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://storage.ko-fi.com https://ko-fi.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://ko-fi.com https://storage.ko-fi.com; frame-src 'self' https://ko-fi.com; frame-ancestors 'none'; form-action 'self' https://ko-fi.com; base-uri 'self'; object-src 'none';" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://storage.ko-fi.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://storage.ko-fi.com https://ko-fi.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://ko-fi.com https://storage.ko-fi.com; frame-ancestors 'none'; form-action 'self' https://ko-fi.com; base-uri 'self'; object-src 'none';" always;
         # (kept as an explicit add_header rather than `expires 1y` to guarantee a
         # single, well-formed Cache-Control value)
     }
@@ -71,7 +71,7 @@ server {
         limit_req zone=api_zone burst=30 nodelay;
         limit_req_status 429;
 
-        proxy_pass http://backend:8080/api/;
+        proxy_pass ${BACKEND_URL}/api/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -91,7 +91,7 @@ server {
         limit_req zone=auth_zone burst=10 nodelay;
         limit_req_status 429;
 
-        proxy_pass http://backend:8080/api/v1/auth/;
+        proxy_pass ${BACKEND_URL}/api/v1/auth/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -102,7 +102,7 @@ server {
 
     # Reverse proxy for public health probes only; block internal metrics and management endpoints
     location = /actuator/health {
-        proxy_pass http://backend:8080/actuator/health;
+        proxy_pass ${BACKEND_URL}/actuator/health;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
