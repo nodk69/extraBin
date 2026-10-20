@@ -6,11 +6,15 @@
 *.pem
 
 # Documentation (user requested not to push)
-/docs/
+/docs/*
 *.md
 DECISIONS.md
 CHANGELOG.md
 README.md
+!/docs/features/
+!/docs/features/*.md
+!/docs/README.md
+!/docs/DEMO_MANIFEST.md
 !backend/README.md
 !frontend/README.md
 
