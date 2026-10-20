@@ -13,6 +13,7 @@ export const EmbedPastePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [isCopied, setIsCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -52,9 +53,10 @@ export const EmbedPastePage: React.FC = () => {
     try {
       await navigator.clipboard.writeText(activeFile.content);
       setIsCopied(true);
+      setCopyError(null);
       setTimeout(() => setIsCopied(false), 2000);
     } catch {
-      // Fallback
+      setCopyError('Could not copy — your browser blocked the clipboard.');
     }
   };
 
@@ -129,6 +131,11 @@ export const EmbedPastePage: React.FC = () => {
             {isCopied ? <Icon name="check" size={11} className="text-[#15803d]" /> : <Icon name="copy" size={11} />}
             <span>{isCopied ? 'Copied' : 'Copy'}</span>
           </button>
+          {copyError && (
+            <p role="status" aria-live="polite" className="m-0 text-[11px] font-semibold text-[#dc2626]">
+              {copyError}
+            </p>
+          )}
           <a
             href={`/p/${paste.publicId}`}
             target="_blank"

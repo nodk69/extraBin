@@ -16,6 +16,7 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
 }) => {
   const [isCopied, setIsCopied] = useState(false);
   const [embedHeight, setEmbedHeight] = useState('450');
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const origin = useMemo(() => {
     if (typeof window !== 'undefined') {
@@ -34,16 +35,21 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
     try {
       await navigator.clipboard.writeText(snippet);
       setIsCopied(true);
+      setCopyError(null);
       setTimeout(() => setIsCopied(false), 2000);
     } catch {
-      // Fallback: select text from textarea
       const el = document.getElementById('embed-snippet-textarea') as HTMLTextAreaElement | null;
       if (el) {
         el.select();
-        document.execCommand('copy');
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), 2000);
+        const succeeded = document.execCommand('copy');
+        if (succeeded) {
+          setIsCopied(true);
+          setCopyError(null);
+          setTimeout(() => setIsCopied(false), 2000);
+          return;
+        }
       }
+      setCopyError('Could not copy — your browser blocked the clipboard.');
     }
   };
 
@@ -133,6 +139,11 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
               <span>{isCopied ? 'Copied!' : 'Copy Code'}</span>
             </button>
           </div>
+          {copyError && (
+            <p role="status" aria-live="polite" className="m-0 text-[11px] font-mono font-semibold text-[#dc2626] pt-1">
+              {copyError}
+            </p>
+          )}
         </div>
 
         {/* Live Preview */}
