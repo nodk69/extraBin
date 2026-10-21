@@ -38,7 +38,8 @@ function getCookie(name: string): string | null {
 
 // Runtime config (injected by nginx entrypoint) with fallback to build-time env (local dev)
 const config = (window as any).__CONFIG__ || {};
-const apiBaseUrl = config.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const rawBaseUrl = config.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const apiBaseUrl = rawBaseUrl.replace(/\/+$/, '');
 
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
