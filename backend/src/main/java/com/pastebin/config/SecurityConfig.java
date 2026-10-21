@@ -102,19 +102,138 @@ public class SecurityConfig {
                 )
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/account/**", "/api/v1/folders/**", "/api/v1/notifications/**", "/api/notifications/**").authenticated()
+                // ── Authenticated: account, folders, notifications ─────────
                 .requestMatchers(
-                    "/api/v1/pastes", "/api/v1/pastes/**",
-                    "/api/pastes", "/api/pastes/**",
-                    "/api/v1/replies", "/api/v1/replies/**",
-                    "/api/replies", "/api/replies/**",
-                    "/api/v1/auth/**",
-                    "/api/v1/discovery/**",
-                    "/p", "/p/**",
-                    "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
-                    "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
-                    "/error"
+                    "/api/v1/account/**",
+                    "/api/v1/folders/**",
+                    "/api/v1/notifications/**",
+                    "/api/notifications/**"
+                ).authenticated()
+
+                // ── Authenticated: personal starred collection ─────────────
+                // Must precede the broader paste GET matchers below.
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/pastes/starred")
+                    .authenticated()
+
+                // ── Public: auth endpoints ─────────────────────────────────
+                .requestMatchers("/api/v1/auth/**").permitAll()
+
+                // ── Public: discovery & author profiles ────────────────────
+                .requestMatchers("/api/v1/discovery/**").permitAll()
+
+                // ── Public: OG metadata HTML ───────────────────────────────
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/p", "/p/**").permitAll()
+
+                // ── Public: paste read operations (explicit routes) ────────
+                .requestMatchers(org.springframework.http.HttpMethod.GET,
+                    "/api/v1/pastes/*",
+                    "/api/v1/pastes/*/embed",
+                    "/api/v1/pastes/*/share",
+                    "/api/v1/pastes/*/raw",
+                    "/api/v1/pastes/*/download",
+                    "/api/v1/pastes/*/download-zip",
+                    "/api/v1/pastes/*/comments",
+                    "/api/v1/pastes/*/replies",
+                    "/api/pastes/*/replies"
                 ).permitAll()
+
+                // ── Public: paste file read operations ─────────────────────
+                .requestMatchers(org.springframework.http.HttpMethod.GET,
+                    "/api/v1/pastes/*/files/**"
+                ).permitAll()
+
+                // ── Tag endpoints: URL-level permitAll, secured by @PreAuthorize("isAuthenticated()") on PasteTagController
+                .requestMatchers(
+                    "/api/v1/pastes/*/tags",
+                    "/api/v1/pastes/*/tags/**"
+                ).permitAll()
+
+                // ── Public: paste creation ─────────────────────────────────
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                    "/api/v1/pastes",
+                    "/api/v1/pastes/encrypted",
+                    "/api/pastes"
+                ).permitAll()
+
+                // ── Public: paste actions (unlock, telemetry) ──────────────
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                    "/api/v1/pastes/*/unlock",
+                    "/api/v1/pastes/*/decrypt-failed"
+                ).permitAll()
+
+                // ── Public: capability-protected ownership operations ──────
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                    "/api/v1/pastes/*/delete-anonymous",
+                    "/api/v1/pastes/*/revoke-link",
+                    "/api/v1/pastes/*/rotate-link"
+                ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.PATCH,
+                    "/api/v1/pastes/*/slug"
+                ).permitAll()
+
+                // ── Public: comments (post + capability delete) ────────────
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                    "/api/v1/pastes/*/comments"
+                ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE,
+                    "/api/v1/pastes/*/comments/*"
+                ).permitAll()
+
+                // ── Public: replies (create, edit, delete) ─────────────────
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                    "/api/v1/pastes/*/replies",
+                    "/api/pastes/*/replies"
+                ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.PATCH,
+                    "/api/v1/replies/*",
+                    "/api/replies/*"
+                ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE,
+                    "/api/v1/replies/*",
+                    "/api/replies/*"
+                ).permitAll()
+
+                // ── Public: voting (paste, comment, reply) ─────────────────
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                    "/api/v1/pastes/*/vote",
+                    "/api/v1/pastes/*/comments/*/vote",
+                    "/api/v1/pastes/*/replies/*/vote",
+                    "/api/pastes/*/replies/*/vote"
+                ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE,
+                    "/api/v1/pastes/*/vote",
+                    "/api/v1/pastes/*/comments/*/vote",
+                    "/api/v1/pastes/*/replies/*/vote",
+                    "/api/pastes/*/replies/*/vote"
+                ).permitAll()
+
+                // ── Public: starring (supports anonymous reaction service check)
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                    "/api/v1/pastes/*/star"
+                ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE,
+                    "/api/v1/pastes/*/star"
+                ).permitAll()
+
+                // ── Infrastructure ─────────────────────────────────────────
+                .requestMatchers(
+                    "/actuator/health", "/actuator/health/**",
+                    "/actuator/info"
+                ).permitAll()
+                .requestMatchers("/actuator/prometheus")
+                    .hasRole("ADMIN")
+
+                // ── Swagger / API docs ─────────────────────────────────────
+                .requestMatchers(
+                    "/v3/api-docs/**",
+                    "/swagger-ui/**",
+                    "/swagger-ui.html"
+                ).permitAll()
+
+                // ── Error page ─────────────────────────────────────────────
+                .requestMatchers("/error").permitAll()
+
+                // ── Secure default ─────────────────────────────────────────
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex

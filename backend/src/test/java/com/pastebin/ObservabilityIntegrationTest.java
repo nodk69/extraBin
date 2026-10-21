@@ -69,6 +69,7 @@ class ObservabilityIntegrationTest {
 
     @Test
     @DisplayName("Actuator Prometheus: Metrics scrape endpoint is exposed and active")
+    @org.springframework.security.test.context.support.WithMockUser(roles = "ADMIN")
     void testPrometheusEndpoint() throws Exception {
         String response = mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk())
