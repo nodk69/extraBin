@@ -37,12 +37,12 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     @Query(value = "SELECT DISTINCT p FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qPattern IS NULL OR LOWER(p.title) LIKE :qPattern ESCAPE '!' OR LOWER(p.content) LIKE :qPattern ESCAPE '!' OR LOWER(t.name) LIKE :qPattern ESCAPE '!')" +
+           " AND (:qPattern IS NULL OR LOWER(p.title) LIKE CAST(:qPattern AS string) ESCAPE '!' OR LOWER(p.content) LIKE CAST(:qPattern AS string) ESCAPE '!' OR LOWER(t.name) LIKE CAST(:qPattern AS string) ESCAPE '!')" +
            " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)",
            countQuery = "SELECT count(DISTINCT p.id) FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qPattern IS NULL OR LOWER(p.title) LIKE :qPattern ESCAPE '!' OR LOWER(p.content) LIKE :qPattern ESCAPE '!' OR LOWER(t.name) LIKE :qPattern ESCAPE '!')" +
+           " AND (:qPattern IS NULL OR LOWER(p.title) LIKE CAST(:qPattern AS string) ESCAPE '!' OR LOWER(p.content) LIKE CAST(:qPattern AS string) ESCAPE '!' OR LOWER(t.name) LIKE CAST(:qPattern AS string) ESCAPE '!')" +
            " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)")
     Page<Paste> findDiscoveryPastes(@Param("now") Instant now,
                                     @Param("language") String language,
