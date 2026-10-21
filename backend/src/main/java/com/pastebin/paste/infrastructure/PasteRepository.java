@@ -40,12 +40,12 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     @Query(value = "SELECT DISTINCT p FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(p.title)) > 0 OR LOCATE(:qSearch, LOWER(p.content)) > 0 OR LOCATE(:qSearch, LOWER(t.name)) > 0)" +
+           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(CAST(p.title AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(p.content AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(t.name AS text))) > 0)" +
            " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)",
            countQuery = "SELECT count(DISTINCT p.id) FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(p.title)) > 0 OR LOCATE(:qSearch, LOWER(p.content)) > 0 OR LOCATE(:qSearch, LOWER(t.name)) > 0)" +
+           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(CAST(p.title AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(p.content AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(t.name AS text))) > 0)" +
            " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)")
     Page<Paste> findDiscoveryPastes(@Param("now") Instant now,
                                     @Param("language") String language,
