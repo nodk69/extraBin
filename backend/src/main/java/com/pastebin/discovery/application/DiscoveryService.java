@@ -112,9 +112,9 @@ public class DiscoveryService {
         }
         String lowered = q.toLowerCase(Locale.ROOT).trim();
         String escaped = lowered
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_");
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
         return "%" + escaped + "%";
     }
 }
