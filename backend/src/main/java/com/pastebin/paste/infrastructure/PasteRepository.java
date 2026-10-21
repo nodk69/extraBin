@@ -32,22 +32,25 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     Optional<Paste> findActiveByPublicIdWithFilesForUpdate(@Param("publicId") String publicId, @Param("now") Instant now);
 
     // Discovery feed/search. Eligibility comes from the single shared predicate in PasteQueries so
-    // every public surface (feed, tags, most-saved) enforces identical rules. Sorting is supplied
-    // via validated Pageable; callers must always append publicId ASC as the deterministic tie-break.
+    // every public surface (feed, tags, most-saved) enforces identical rules. Uses LOCATE instead of
+    // LIKE to avoid PostgreSQL parameter type inference issues with LIKE ... ESCAPE and to provide
+    // exact substring matching (no wildcard semantics for % or _).
+    // Sorting is supplied via validated Pageable; callers must always append publicId ASC as the
+    // deterministic tie-break.
     @Query(value = "SELECT DISTINCT p FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qPattern IS NULL OR LOWER(p.title) LIKE CONCAT(:qPattern, '') ESCAPE '!' OR LOWER(p.content) LIKE CONCAT(:qPattern, '') ESCAPE '!' OR LOWER(t.name) LIKE CONCAT(:qPattern, '') ESCAPE '!')" +
+           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(p.title)) > 0 OR LOCATE(:qSearch, LOWER(p.content)) > 0 OR LOCATE(:qSearch, LOWER(t.name)) > 0)" +
            " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)",
            countQuery = "SELECT count(DISTINCT p.id) FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qPattern IS NULL OR LOWER(p.title) LIKE CONCAT(:qPattern, '') ESCAPE '!' OR LOWER(p.content) LIKE CONCAT(:qPattern, '') ESCAPE '!' OR LOWER(t.name) LIKE CONCAT(:qPattern, '') ESCAPE '!')" +
+           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(p.title)) > 0 OR LOCATE(:qSearch, LOWER(p.content)) > 0 OR LOCATE(:qSearch, LOWER(t.name)) > 0)" +
            " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)")
     Page<Paste> findDiscoveryPastes(@Param("now") Instant now,
                                     @Param("language") String language,
                                     @Param("tagName") String tagName,
-                                    @Param("qPattern") String qPattern,
+                                    @Param("qSearch") String qSearch,
                                     @Param("windowStart") Instant windowStart,
                                     Pageable pageable);
 

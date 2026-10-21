@@ -39,7 +39,7 @@ public class DiscoveryService {
                 now,
                 normalizeLanguage(language),
                 normalizeTag(tag),
-                buildSearchPattern(q),
+                buildSearchTerm(q),
                 windowStart,
                 PageRequest.of(page, size, sortSpec));
 
@@ -106,15 +106,10 @@ public class DiscoveryService {
         return tag.toLowerCase(Locale.ROOT).trim();
     }
 
-    private String buildSearchPattern(String q) {
+    private String buildSearchTerm(String q) {
         if (q == null || q.isBlank()) {
             return null;
         }
-        String lowered = q.toLowerCase(Locale.ROOT).trim();
-        String escaped = lowered
-                .replace("!", "!!")
-                .replace("%", "!%")
-                .replace("_", "!_");
-        return "%" + escaped + "%";
+        return q.toLowerCase(Locale.ROOT).trim();
     }
 }
