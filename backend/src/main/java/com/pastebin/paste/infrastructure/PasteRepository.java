@@ -35,18 +35,22 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     // every public surface (feed, tags, most-saved) enforces identical rules. Uses LOCATE instead of
     // LIKE to avoid PostgreSQL parameter type inference issues with LIKE ... ESCAPE and to provide
     // exact substring matching (no wildcard semantics for % or _).
+    // CAST(:qSearch AS string) and COALESCE(:windowStart, p.createdAt) are required for PostgreSQL:
+    // Hibernate 6.5 does not propagate parameter types through position()/LOCATE (null binds as
+    // JAVA_OBJECT -> bytea) and setNull on TIMESTAMP_UTC is sent untyped ("could not determine data
+    // type"). H2 (tests) is dynamically typed and cannot reproduce either failure.
     // Sorting is supplied via validated Pageable; callers must always append publicId ASC as the
     // deterministic tie-break.
     @Query(value = "SELECT DISTINCT p FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(CAST(p.title AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(p.content AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(t.name AS text))) > 0)" +
-           " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)",
+           " AND (:qSearch IS NULL OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.title AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.content AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(t.name AS text))) > 0)" +
+           " AND p.createdAt >= COALESCE(:windowStart, p.createdAt)",
            countQuery = "SELECT count(DISTINCT p.id) FROM Paste p LEFT JOIN p.tags t WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND (:language IS NULL OR p.language = :language)" +
            " AND (:tagName IS NULL OR t.name = :tagName)" +
-           " AND (:qSearch IS NULL OR LOCATE(:qSearch, LOWER(CAST(p.title AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(p.content AS text))) > 0 OR LOCATE(:qSearch, LOWER(CAST(t.name AS text))) > 0)" +
-           " AND (:windowStart IS NULL OR p.createdAt >= :windowStart)")
+           " AND (:qSearch IS NULL OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.title AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.content AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(t.name AS text))) > 0)" +
+           " AND p.createdAt >= COALESCE(:windowStart, p.createdAt)")
     Page<Paste> findDiscoveryPastes(@Param("now") Instant now,
                                     @Param("language") String language,
                                     @Param("tagName") String tagName,
@@ -105,21 +109,24 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     Page<Paste> findActiveUserPastesUnfiled(@Param("userId") Long userId, @Param("now") Instant now, Pageable pageable);
 
     // Unified library query: optional search (title/content, case-insensitive) and optional tag filter.
+    // CAST(:search AS string) is required for PostgreSQL: a null search inside the concat expression
+    // otherwise binds as JAVA_OBJECT -> bytea ("function lower(bytea) does not exist"). H2 (tests)
+    // is dynamically typed and cannot reproduce the failure.
     // Sorting is supplied via validated Pageable (whitelisted properties only).
     @Query(value = "SELECT DISTINCT p FROM Paste p LEFT JOIN p.tags t " +
            "WHERE p.userId = :userId AND (p.expiresAt IS NULL OR p.expiresAt > :now) " +
            "AND (:folderId IS NULL OR p.folder.id = :folderId) " +
            "AND (:unfiled = false OR p.folder IS NULL) " +
            "AND (:tagName IS NULL OR t.name = :tagName) " +
-           "AND (:search IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "     OR LOWER(p.content) LIKE LOWER(CONCAT('%', :search, '%')))",
+           "AND (:search IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+           "     OR LOWER(p.content) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))",
            countQuery = "SELECT count(DISTINCT p.id) FROM Paste p LEFT JOIN p.tags t " +
            "WHERE p.userId = :userId AND (p.expiresAt IS NULL OR p.expiresAt > :now) " +
            "AND (:folderId IS NULL OR p.folder.id = :folderId) " +
            "AND (:unfiled = false OR p.folder IS NULL) " +
            "AND (:tagName IS NULL OR t.name = :tagName) " +
-           "AND (:search IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "     OR LOWER(p.content) LIKE LOWER(CONCAT('%', :search, '%')))")
+           "AND (:search IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+           "     OR LOWER(p.content) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<Paste> findUserLibraryPastes(@Param("userId") Long userId,
                                       @Param("now") Instant now,
                                       @Param("folderId") Long folderId,
