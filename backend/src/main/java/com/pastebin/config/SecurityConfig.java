@@ -37,6 +37,12 @@ public class SecurityConfig {
     @Value("${pastebin.cors.allowed-origins:http://localhost:5173}")
     private String allowedOrigins;
 
+    @Value("${pastebin.csrf.cookie-secure:false}")
+    private boolean csrfCookieSecure;
+
+    @Value("${pastebin.csrf.cookie-same-site:Lax}")
+    private String csrfCookieSameSite;
+
     private final com.pastebin.identity.application.UserSessionVersionService userSessionVersionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -47,6 +53,13 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
+    }
+
+    @Bean
+    public CookieCsrfTokenRepository csrfTokenRepository() {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setSecure(csrfCookieSecure);
+        return repository;
     }
 
     @Bean
@@ -61,10 +74,10 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRepository(csrfTokenRepository())
                 .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
             )
-            .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
+            .addFilterAfter(new CsrfCookieFilter(csrfCookieSameSite), CsrfFilter.class)
             .addFilterAfter(new com.pastebin.shared.security.SessionVersionValidationFilter(userSessionVersionService, objectMapper), CsrfCookieFilter.class)
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)

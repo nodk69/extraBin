@@ -73,6 +73,9 @@ pastebin:
     batch-size: 500
   cors:
     allowed-origins: "${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}"
+  csrf:
+    cookie-secure: "${PASTEBIN_CSRF_COOKIE_SECURE:false}"
+    cookie-same-site: "${PASTEBIN_CSRF_COOKIE_SAME_SITE:Lax}"
   security:
     trusted-proxies: "${APP_TRUSTED_PROXIES:127.0.0.1,::1}"
     vote-pepper: "${APP_VOTE_PEPPER:}"
