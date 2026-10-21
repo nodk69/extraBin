@@ -27,13 +27,14 @@ RUN groupadd -r pastebin && useradd -r -g pastebin -d /app -s /sbin/nologin past
 COPY --from=builder /workspace/target/pastebin-backend-*.jar app.jar
 RUN chown -R pastebin:pastebin /app
 
-# Expose standard service port
-EXPOSE 8080
+# Render sets PORT env var; fall back to 8080 for local Docker builds
+ENV PORT=8080
+EXPOSE ${PORT}
 
-# Health check using Actuator probe (management port 8081)
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+# Health check using Actuator probe on the management port (8081 in prod)
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health/liveness || exit 1
 
 USER pastebin:pastebin
 
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-XX:+UseContainerSupport", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "java -Djava.security.egd=file:/dev/./urandom -XX:+UseContainerSupport -Dserver.port=${PORT} -jar app.jar"]

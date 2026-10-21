@@ -36,7 +36,9 @@ management:
   server:
     # P0-04/P1-20: dedicated management port; kept configurable so deployments can
     # publish it on their own interface. Compose sets MANAGEMENT_PORT=8081.
-    port: ${MANAGEMENT_PORT:8081}
+    # When MANAGEMENT_PORT is not set, actuator shares the main server port
+    # (required for Render where the health check targets the single exposed port).
+    port: ${MANAGEMENT_PORT:${server.port}}
 
 # P1-20: OpenAPI/Swagger artifacts are develop-time documents; in prod they are an
 # attack-surface map for free. Disable both the generated spec and the UI.
