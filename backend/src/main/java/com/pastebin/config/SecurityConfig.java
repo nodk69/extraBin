@@ -59,6 +59,15 @@ public class SecurityConfig {
     public CookieCsrfTokenRepository csrfTokenRepository() {
         CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         repository.setSecure(csrfCookieSecure);
+        // Applied to the Set-Cookie the repository itself writes. Browsers require
+        // SameSite=None to be paired with Secure, otherwise the cookie is dropped and
+        // every cross-origin mutation fails CSRF validation.
+        repository.setCookieCustomizer(cookie -> {
+            cookie.sameSite(csrfCookieSameSite);
+            if ("None".equalsIgnoreCase(csrfCookieSameSite)) {
+                cookie.secure(true);
+            }
+        });
         return repository;
     }
 
@@ -77,7 +86,7 @@ public class SecurityConfig {
                 .csrfTokenRepository(csrfTokenRepository())
                 .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
             )
-            .addFilterAfter(new CsrfCookieFilter(csrfCookieSameSite), CsrfFilter.class)
+            .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
             .addFilterAfter(new com.pastebin.shared.security.SessionVersionValidationFilter(userSessionVersionService, objectMapper), CsrfCookieFilter.class)
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)

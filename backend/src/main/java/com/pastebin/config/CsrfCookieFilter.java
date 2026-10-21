@@ -8,32 +8,26 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collection;
 
 /**
  * Forces resolution of the deferred CSRF token on every request so that the
  * CookieCsrfTokenRepository writes the XSRF-TOKEN cookie even on GET responses.
  *
- * Cross-origin fix: the XSRF-TOKEN cookie is set on the backend domain and is
+ * <p>Cross-origin fix: the XSRF-TOKEN cookie is set on the backend domain and is
  * invisible to document.cookie on the frontend domain. To make the token value
  * accessible to the frontend JavaScript, we also set it as a response header
- * (X-CSRF-TOKEN) which the frontend reads from the bootstrap response.
+ * (X-CSRF-TOKEN) which the frontend reads from the bootstrap response and exposes
+ * through the CORS exposed-headers list.
  *
- * Also appends SameSite attribute to the XSRF-TOKEN cookie for cross-origin support.
+ * <p>The cookie's {@code SameSite}/{@code Secure} attributes are applied by
+ * {@link SecurityConfig#csrfTokenRepository()} through
+ * {@code CookieCsrfTokenRepository#setCookieCustomizer}. They deliberately are not
+ * patched here: Spring Security saves the cookie from a token captured before this
+ * filter runs, so a response wrapper at this position never observes the write.
  */
 public class CsrfCookieFilter extends OncePerRequestFilter {
 
     private static final String CSRF_RESPONSE_HEADER = "X-CSRF-TOKEN";
-
-    private final String cookieSameSite;
-
-    public CsrfCookieFilter() {
-        this("Lax");
-    }
-
-    public CsrfCookieFilter(String cookieSameSite) {
-        this.cookieSameSite = cookieSameSite;
-    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -47,57 +41,6 @@ public class CsrfCookieFilter extends OncePerRequestFilter {
             response.setHeader(CSRF_RESPONSE_HEADER, tokenValue);
         }
 
-        if (!"Lax".equals(cookieSameSite)) {
-            filterChain.doFilter(request, new SameSiteResponseWrapper(response, cookieSameSite));
-        } else {
-            filterChain.doFilter(request, response);
-        }
-    }
-
-    private static class SameSiteResponseWrapper extends jakarta.servlet.http.HttpServletResponseWrapper {
-        private final String sameSiteValue;
-
-        SameSiteResponseWrapper(HttpServletResponse response, String sameSiteValue) {
-            super(response);
-            this.sameSiteValue = sameSiteValue;
-        }
-
-        @Override
-        public void addHeader(String name, String value) {
-            if ("Set-Cookie".equalsIgnoreCase(name) && value != null && value.startsWith("XSRF-TOKEN=")) {
-                super.addHeader(name, appendSameSite(value));
-            } else {
-                super.addHeader(name, value);
-            }
-        }
-
-        @Override
-        public void setHeader(String name, String value) {
-            if ("Set-Cookie".equalsIgnoreCase(name) && value != null && value.startsWith("XSRF-TOKEN=")) {
-                super.setHeader(name, appendSameSite(value));
-            } else {
-                super.setHeader(name, value);
-            }
-        }
-
-        @Override
-        public void addDateHeader(String name, long date) { super.addDateHeader(name, date); }
-        @Override
-        public void addIntHeader(String name, int value) { super.addIntHeader(name, value); }
-        @Override
-        public void setDateHeader(String name, long date) { super.setDateHeader(name, date); }
-        @Override
-        public void setIntHeader(String name, int value) { super.setIntHeader(name, value); }
-
-        private String appendSameSite(String cookieHeader) {
-            String result = cookieHeader;
-            if (!result.toLowerCase().contains("samesite=")) {
-                result += "; SameSite=" + sameSiteValue;
-            }
-            if ("None".equals(sameSiteValue) && !result.toLowerCase().contains("secure")) {
-                result += "; Secure";
-            }
-            return result;
-        }
+        filterChain.doFilter(request, response);
     }
 }

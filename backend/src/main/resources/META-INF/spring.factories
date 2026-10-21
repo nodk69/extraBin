@@ -1,0 +1,3 @@
+# Runs before Spring Boot binds server.servlet.session.cookie.same-site to its enum.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.pastebin.config.SameSiteCookieEnvironmentPostProcessor

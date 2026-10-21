@@ -31,9 +31,10 @@ RUN chown -R pastebin:pastebin /app
 ENV PORT=8080
 EXPOSE ${PORT}
 
-# Health check using Actuator probe on the management port (8081 in prod)
+# Actuator moves to MANAGEMENT_PORT when it is set (8081 in compose) and otherwise
+# shares the application port, which is what Render exposes. Probe that same port.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health/liveness || exit 1
+  CMD sh -c 'wget --no-verbose --tries=1 --spider "http://localhost:${MANAGEMENT_PORT:-${PORT}}/actuator/health/liveness" || exit 1'
 
 USER pastebin:pastebin
 
