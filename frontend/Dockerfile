@@ -4,11 +4,6 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-# Build-time env vars for Vite (Render passes these during Docker build)
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_API_BASE_URL
-
 # Copy dependency specifications
 COPY package.json package-lock.json ./
 RUN npm ci

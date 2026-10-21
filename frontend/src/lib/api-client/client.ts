@@ -36,8 +36,12 @@ function getCookie(name: string): string | null {
   return matches ? decodeURIComponent(matches[1]) : null;
 }
 
+// Runtime config (injected by nginx entrypoint) with fallback to build-time env (local dev)
+const config = (window as any).__CONFIG__ || {};
+const apiBaseUrl = config.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: apiBaseUrl,
   withCredentials: true,
   headers: {
     'Accept': 'application/json',
@@ -56,7 +60,7 @@ export const apiClient = axios.create({
 // GET bootstrap to obtain it; a shared promise guards against several
 // concurrent mutations each dispatching their own probe.
 const csrfBootstrapClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: apiBaseUrl,
   withCredentials: true,
 });
 
