@@ -30,7 +30,7 @@ export class ApiError extends Error {
   }
 }
 
-// Function to extract XSRF cookie value
+// Function to extract XSRF cookie value (same-origin fallback for local dev)
 function getCookie(name: string): string | null {
   const matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
   return matches ? decodeURIComponent(matches[1]) : null;
@@ -50,14 +50,26 @@ export const apiClient = axios.create({
   },
 });
 
+// Cross-origin CSRF: the XSRF-TOKEN cookie is set on the backend domain and is
+// invisible to document.cookie on the frontend domain. The backend's CsrfCookieFilter
+// also exposes the token value in the X-CSRF-TOKEN response header, which we read
+// here and cache for use on mutations. For same-origin (local dev), the cookie
+// fallback still works.
+let cachedCsrfToken: string | null = null;
+
+function getCsrfToken(): string | null {
+  if (cachedCsrfToken) return cachedCsrfToken;
+  return getCookie('XSRF-TOKEN');
+}
+
 // Interceptor to attach CSRF token automatically.
 //
-// P1-09: on a cold browser session the XSRF-TOKEN cookie does not exist until any
+// P1-09: on a cold browser session the CSRF token does not exist until any
 // backend request materializes it (the backend's CsrfCookieFilter runs on every
 // request that enters the security chain, including 401 responses). A mutation
 // fired as the very first request — notably the Supabase session sync on the
 // OAuth callback page — would otherwise post without a CSRF token and be
-// rejected with 403. When the cookie is missing we first perform one idempotent
+// rejected with 403. When the token is missing we first perform one idempotent
 // GET bootstrap to obtain it; a shared promise guards against several
 // concurrent mutations each dispatching their own probe.
 const csrfBootstrapClient = axios.create({
@@ -67,20 +79,29 @@ const csrfBootstrapClient = axios.create({
 
 let csrfBootstrap: Promise<void> | null = null;
 
-function ensureCsrfCookie(): Promise<void> {
-  if (getCookie('XSRF-TOKEN')) {
+function ensureCsrfToken(): Promise<void> {
+  if (getCsrfToken()) {
     return Promise.resolve();
   }
   if (!csrfBootstrap) {
     csrfBootstrap = csrfBootstrapClient
       // `/auth/me` is intentionally chosen: it is exempt from CSRF (GET), sets the
-      // cookie, and its (401/200) outcome is irrelevant here.
+      // cookie and response header, and its (401/200) outcome is irrelevant here.
       .get('/auth/me', { headers: { Accept: 'application/json' } })
-      .catch(() => {
-        // 401/network failure still carries the Set-Cookie response header.
+      .then((response) => {
+        const headerToken = response.headers['x-csrf-token'];
+        if (headerToken) {
+          cachedCsrfToken = headerToken;
+        }
+      })
+      .catch((error) => {
+        // 401/network failure still carries the response header.
+        if (error?.response?.headers?.['x-csrf-token']) {
+          cachedCsrfToken = error.response.headers['x-csrf-token'];
+        }
       })
       .then(() => {
-        if (!getCookie('XSRF-TOKEN')) {
+        if (!getCsrfToken()) {
           // Backend unreachable — later mutations will fail with a clear network/
           // 403 error rather than silently proceeding unauthenticated.
           csrfBootstrap = null;
@@ -93,8 +114,8 @@ function ensureCsrfCookie(): Promise<void> {
 apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const method = config.method?.toUpperCase();
   if (method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-    await ensureCsrfCookie();
-    const xsrfToken = getCookie('XSRF-TOKEN');
+    await ensureCsrfToken();
+    const xsrfToken = getCsrfToken();
     if (xsrfToken) {
       config.headers['X-XSRF-TOKEN'] = xsrfToken;
     }
@@ -115,7 +136,7 @@ apiClient.interceptors.response.use(
     if (error.response?.data && typeof error.response.data === 'object' && 'status' in error.response.data) {
       throw new ApiError(error.response.data);
     }
-    
+
     // Generic fallback for network / timeout failures
     throw new ApiError({
       title: error.message || 'Network Error',

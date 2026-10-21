@@ -13,11 +13,17 @@ import java.util.Collection;
 /**
  * Forces resolution of the deferred CSRF token on every request so that the
  * CookieCsrfTokenRepository writes the XSRF-TOKEN cookie even on GET responses.
- * The SPA reads this cookie and echoes it as the X-XSRF-TOKEN header on mutations.
+ *
+ * Cross-origin fix: the XSRF-TOKEN cookie is set on the backend domain and is
+ * invisible to document.cookie on the frontend domain. To make the token value
+ * accessible to the frontend JavaScript, we also set it as a response header
+ * (X-CSRF-TOKEN) which the frontend reads from the bootstrap response.
  *
  * Also appends SameSite attribute to the XSRF-TOKEN cookie for cross-origin support.
  */
 public class CsrfCookieFilter extends OncePerRequestFilter {
+
+    private static final String CSRF_RESPONSE_HEADER = "X-CSRF-TOKEN";
 
     private final String cookieSameSite;
 
@@ -37,7 +43,8 @@ public class CsrfCookieFilter extends OncePerRequestFilter {
             csrfToken = (CsrfToken) request.getAttribute("_csrf");
         }
         if (csrfToken != null) {
-            csrfToken.getToken();
+            String tokenValue = csrfToken.getToken();
+            response.setHeader(CSRF_RESPONSE_HEADER, tokenValue);
         }
 
         if (!"Lax".equals(cookieSameSite)) {

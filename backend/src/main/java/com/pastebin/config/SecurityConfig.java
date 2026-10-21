@@ -152,7 +152,7 @@ public class SecurityConfig {
             "X-Requested-With", "X-Correlation-ID", "X-Paste-Password", "X-Skip-View-Count", "X-Comment-Delete-Token",
             "X-Share-Token", "X-Paste-Unlock"
         ));
-        config.setExposedHeaders(List.of("Location", "Retry-After", "X-XSRF-TOKEN", "X-Correlation-ID", "X-Comment-Delete-Token", "Content-Disposition", "X-Paste-Unlock"));
+        config.setExposedHeaders(List.of("Location", "Retry-After", "X-XSRF-TOKEN", "X-CSRF-TOKEN", "X-Correlation-ID", "X-Comment-Delete-Token", "Content-Disposition", "X-Paste-Unlock"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
