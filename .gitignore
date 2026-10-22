@@ -61,6 +61,16 @@ temp/
 performance-tests/results/
 performance-tests/output/
 
+# Downloaded k6 binaries (not source; the scripts under performance-tests/k6/ are tracked)
+performance-tests/k6.zip
+performance-tests/k6-v*/
+
+# Local build logs
+backend/test_output.txt
+
+# Local Freebuff workspace metadata
+.freebuff/
+
 # Compiled assets
 *.class
 *.o
