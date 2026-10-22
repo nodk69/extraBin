@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase/client';
 import { authApi } from '../api/authApi';
 import { LoginPayload, RegisterPayload, UserResponse } from '../types/auth';
@@ -22,7 +22,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const syncSessionWithBackend = async (accessToken: string, email: string, username?: string, avatarUrl?: string | null) => {
+  // Memoized: consumers such as AuthCallbackPage list these in effect dependencies.
+  // A fresh identity on every provider render re-ran that effect (and therefore the
+  // /auth/supabase-sync request) for each state update, producing the 401 retry storm.
+  const syncSessionWithBackend = useCallback(async (accessToken: string, email: string, username?: string, avatarUrl?: string | null) => {
     try {
       const syncedUser = await authApi.syncSupabase({
         accessToken,
@@ -48,9 +51,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
     }
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const { data } = await supabase.auth.getSession();
       if (data?.session?.user?.email && data.session.access_token) {
@@ -71,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [syncSessionWithBackend]);
 
   useEffect(() => {
     refreshUser();
@@ -94,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshUser, syncSessionWithBackend]);
 
   const loginWithOAuth = async (provider: 'google' | 'github') => {
     const redirectTo = `${window.location.origin}/auth/callback`;
