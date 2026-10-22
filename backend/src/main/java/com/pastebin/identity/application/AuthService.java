@@ -24,7 +24,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,12 +43,16 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
+    /** Bounded so a pathological username collision cannot spin; three is ample in practice. */
+    private static final int PROVISION_ATTEMPTS = 3;
 
     @Value("${supabase.url:}")
     private String supabaseUrl;
@@ -73,6 +81,7 @@ public class AuthService {
 
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
     private final SecurityContextHolderStrategy securityContextHolderStrategy = SecurityContextHolder.getContextHolderStrategy();
+    private final TransactionTemplate provisioningTransaction;
 
     public AuthService(UserRepository userRepository,
                        PasswordResetTokenRepository passwordResetTokenRepository,
@@ -80,7 +89,8 @@ public class AuthService {
                        AuthenticationManager authenticationManager,
                        RateLimiterService rateLimiterService,
                        com.pastebin.shared.security.ClientIpResolver clientIpResolver,
-                       UserSessionVersionService userSessionVersionService) {
+                       UserSessionVersionService userSessionVersionService,
+                       PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -88,6 +98,8 @@ public class AuthService {
         this.rateLimiterService = rateLimiterService;
         this.clientIpResolver = clientIpResolver;
         this.userSessionVersionService = userSessionVersionService;
+        this.provisioningTransaction = new TransactionTemplate(transactionManager);
+        this.provisioningTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Transactional
@@ -328,25 +340,7 @@ public class AuthService {
 
         SupabaseIdentity identity = verifySupabaseAccessToken(accessToken);
 
-        User user;
-        try {
-            user = userRepository.findByEmail(identity.email()).orElseGet(() -> {
-                String base = identity.username() != null ? identity.username() : identity.email().split("@")[0];
-                String safeUsername = resolveUniqueUsername(base);
-                User newUser = new User(
-                        safeUsername,
-                        identity.email(),
-                        passwordEncoder.encode(UUID.randomUUID().toString()),
-                        "ROLE_USER"
-                );
-                newUser.setEmailVerified(true);
-                return userRepository.save(newUser);
-            });
-        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-            log.warn("Concurrent OAuth user insertion detected for email: {}. Fetching existing record.", identity.email());
-            user = userRepository.findByEmail(identity.email())
-                    .orElseThrow(() -> new UnauthorizedException("Unable to synchronize user session"));
-        }
+        User user = provisionLocalUser(identity.email(), identity.username());
 
         PastebinUserPrincipal principal = new PastebinUserPrincipal(user);
         Authentication auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
@@ -356,6 +350,63 @@ public class AuthService {
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
         return toUserResponse(user);
+    }
+
+    /**
+     * Finds or creates the local account for an already verified Supabase identity.
+     *
+     * <p>Provisioning is a check-then-act race by nature: two concurrent first logins for
+     * one identity both see no row. The insert therefore goes through
+     * {@link UserRepository#insertIfAbsent} ({@code ON CONFLICT DO NOTHING}), so the loser
+     * writes nothing instead of raising 23505 — that is what previously poisoned the
+     * session ({@code AssertionFailure: null id ... don't flush the Session after an
+     * exception occurs}) and, on PostgreSQL, aborted the transaction ({@code 25P02}).
+     *
+     * <p>Each attempt runs in its own ({@code REQUIRES_NEW}) transaction. A skipped insert
+     * means either our email or our candidate username was taken: the next attempt either
+     * finds our email or re-resolves the username to the next free suffix. This also turns
+     * the "username taken by a different identity" case into a success instead of a 401.
+     */
+    User provisionLocalUser(String email, String username) {
+        // The native insert bypasses the entity constructor, which normalizes the address.
+        String normalizedEmail = email.toLowerCase().trim();
+        String base = username != null ? username : normalizedEmail.split("@")[0];
+        for (int attempt = 1; attempt <= PROVISION_ATTEMPTS; attempt++) {
+            try {
+                User user = provisioningTransaction.execute(status -> attemptProvision(normalizedEmail, base));
+                if (user != null) {
+                    return user;
+                }
+                if (attempt < PROVISION_ATTEMPTS) {
+                    log.debug("Account provisioning attempt {} lost a race; retrying on a fresh transaction.", attempt);
+                }
+            } catch (DataIntegrityViolationException ex) {
+                // insertIfAbsent absorbs unique collisions; this is a last-resort guard so an
+                // unexpected constraint still retries cleanly instead of returning a 500.
+                log.debug("Account provisioning attempt {} failed on a constraint; retrying.", attempt);
+            }
+        }
+        log.warn("Account provisioning did not converge after {} attempts for a verified Supabase identity.",
+                PROVISION_ATTEMPTS);
+        throw new UnauthorizedException("Unable to synchronize user session");
+    }
+
+    private User attemptProvision(String email, String base) {
+        Optional<User> existing = userRepository.findByEmail(email);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        int inserted = userRepository.insertIfAbsent(
+                resolveUniqueUsername(base),
+                email,
+                passwordEncoder.encode(UUID.randomUUID().toString()));
+        if (inserted == 0) {
+            // The competing row is committed by now (the unique index made this wait), so
+            // the caller's next attempt can read it or pick the next free username.
+            return null;
+        }
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new UnauthorizedException("Unable to synchronize user session"));
     }
 
     private void syncPasswordToSupabaseIfConfigured(String email, String newPassword) {
@@ -411,9 +462,12 @@ public class AuthService {
      */
     private SupabaseIdentity verifySupabaseAccessToken(String accessToken) {
         if (supabaseUrl.isBlank() || supabaseAnonKey.isBlank()) {
+            // Operator-facing only: the client still receives the same opaque 401.
+            log.error("Supabase login rejected: supabase.url/supabase.anon-key are not configured");
             throw new UnauthorizedException("Supabase is not configured on this server.");
         }
         if (accessToken == null || accessToken.isBlank()) {
+            log.warn("Supabase login rejected: the client sent an empty access token");
             throw new UnauthorizedException("A valid Supabase access token is required.");
         }
         try {
@@ -427,12 +481,17 @@ public class AuthService {
 
             HttpResponse<String> verifyRes = httpClient.send(verifyReq, HttpResponse.BodyHandlers.ofString());
             if (verifyRes.statusCode() != 200) {
+                // Never log the token itself or the email it carries: the length alone
+                // separates "no token reached us" from "Supabase rejected a real one".
+                log.warn("Supabase token verification rejected by upstream: status={}, tokenLength={}",
+                        verifyRes.statusCode(), accessToken.length());
                 throw new UnauthorizedException("Supabase access token verification failed.");
             }
 
             com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(verifyRes.body());
             String email = node.path("email").asText(null);
             if (email == null || email.isBlank()) {
+                log.warn("Supabase token verification returned no email claim");
                 throw new UnauthorizedException("Supabase access token verification failed.");
             }
 
@@ -440,6 +499,7 @@ public class AuthService {
         } catch (UnauthorizedException e) {
             throw e;
         } catch (Exception e) {
+            log.warn("Supabase token verification failed before reaching a response: {}", e.toString());
             throw new UnauthorizedException("Supabase access token verification failed.");
         }
     }
