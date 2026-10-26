@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from '../../../components/ui/PaperIcon';
 import { Loading } from '../../../components/ui/Loading';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
+import { Select, type SelectOption } from '../../../components/ui/dropdown';
 import { useAuth } from '../../auth/context/AuthContext';
 import { accountApi, PasteSummary, PagedResponse, TagItem } from '../api/accountApi';
 import { EditPasteModal } from '../../pastes/components/EditPasteModal';
@@ -288,22 +289,6 @@ export const AccountPage: React.FC = () => {
             Account Dashboard
           </h1>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            to="/discovery"
-            className="flex items-center gap-2 py-2 px-3.5 border border-[#d5d0c5] rounded-lg bg-white text-xs font-semibold text-[#17201d] hover:bg-[#ebe7dc] transition-all no-underline shadow-[2px_2px_0px_#d5d0c5]"
-          >
-            <Icon name="grid" size={14} />
-            <span>Explore Pastes</span>
-          </Link>
-          <Link
-            to="/"
-            className="flex items-center gap-2 py-2 px-4 rounded-lg bg-[#ff5c3d] text-[#17201d] text-xs font-bold shadow-[2px_3px_0px_#17201d] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_4px_0px_#17201d] transition-all no-underline"
-          >
-            <Icon name="plus" size={14} />
-            <span>Create New Paste</span>
-          </Link>
-        </div>
       </div>
 
       {/* Profile Overview Card */}
@@ -541,42 +526,34 @@ export const AccountPage: React.FC = () => {
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             {/* Sort Selector */}
-            <div className="relative">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'updatedAt' | 'createdAt' | 'title')}
-                aria-label="Sort pastes"
-                className="controls-input text-xs font-mono appearance-none pr-7 cursor-pointer bg-white"
-              >
-                <option value="updatedAt">Recently Updated</option>
-                <option value="createdAt">Recently Created</option>
-                <option value="title">Alphabetical</option>
-              </select>
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[#74786f] pointer-events-none">
-                <Icon name="chevron-down" size={12} />
-              </span>
-            </div>
+            <Select
+              id="account-sort-select"
+              value={sortBy}
+              onChange={(val) => setSortBy(val as 'updatedAt' | 'createdAt' | 'title')}
+              ariaLabel="Sort pastes"
+              size="sm"
+              menuWidth={180}
+              options={[
+                { value: 'updatedAt', label: 'Recently Updated' },
+                { value: 'createdAt', label: 'Recently Created' },
+                { value: 'title', label: 'Alphabetical' },
+              ]}
+            />
 
             {/* Tag Filter */}
             {myTags.length > 0 && (
-              <div className="relative">
-                <select
-                  value={selectedTag}
-                  onChange={(e) => setSelectedTag(e.target.value)}
-                  aria-label="Filter by tag"
-                  className="controls-input text-xs font-mono appearance-none pr-7 cursor-pointer bg-white"
-                >
-                  <option value="">All Tags</option>
-                  {myTags.map((t) => (
-                    <option key={t.id} value={t.name}>
-                      #{t.name}
-                    </option>
-                  ))}
-                </select>
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[#74786f] pointer-events-none">
-                  <Icon name="tag" size={12} />
-                </span>
-              </div>
+              <Select
+                id="account-tag-filter"
+                value={selectedTag}
+                onChange={(val) => setSelectedTag(val)}
+                ariaLabel="Filter by tag"
+                size="sm"
+                menuWidth={180}
+                options={[
+                  { value: '', label: 'All Tags' },
+                  ...myTags.map((t) => ({ value: t.name, label: `#${t.name}` })),
+                ]}
+              />
             )}
 
             {/* Search Box */}
@@ -827,13 +804,6 @@ export const AccountPage: React.FC = () => {
                   Star pastes you want to revisit later. They'll appear here for quick access.
                 </p>
               </div>
-              <Link
-                to="/discovery"
-                className="inline-flex items-center gap-2 py-2 px-4 rounded-lg bg-[#ff5c3d] text-[#17201d] text-xs font-bold shadow-[2px_3px_0px_#17201d] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all no-underline"
-              >
-                <Icon name="grid" size={14} />
-                <span>Explore Pastes</span>
-              </Link>
             </div>
           ) : (
             <div className="account-table-card">

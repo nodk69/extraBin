@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { History, GitCompare, RefreshCw, ChevronRight } from 'lucide-react';
+import { NativeSelect } from '../../../components/ui/dropdown';
 
 interface SimVersion {
   version: number;
@@ -114,30 +115,34 @@ export const RevisionHistoryDemo: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="flex items-center gap-2">
             <label className="text-[11px] font-bold text-[#74786f]">Base:</label>
-            <select
+            <NativeSelect
               value={baseIdx}
-              onChange={(e) => setBaseIdx(Number(e.target.value))}
-              className="px-2 py-1 rounded-md border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#17201d] focus:outline-none focus:ring-2 focus:ring-[#f97316]"
+              onChange={(val) => setBaseIdx(Number(val))}
               aria-label="Base version"
+              selectSize="sm"
+              wrapperClassName="w-auto"
+              className="px-2 py-1 rounded-md border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#17201d]"
             >
               {versions.map((v, i) => (
                 <option key={v.version} value={i}>{v.label}</option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <ChevronRight className="w-4 h-4 text-[#74786f] hidden sm:block" />
           <div className="flex items-center gap-2">
             <label className="text-[11px] font-bold text-[#74786f]">Target:</label>
-            <select
+            <NativeSelect
               value={targetIdx}
-              onChange={(e) => setTargetIdx(Number(e.target.value))}
-              className="px-2 py-1 rounded-md border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#17201d] focus:outline-none focus:ring-2 focus:ring-[#f97316]"
+              onChange={(val) => setTargetIdx(Number(val))}
               aria-label="Target version"
+              selectSize="sm"
+              wrapperClassName="w-auto"
+              className="px-2 py-1 rounded-md border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#17201d]"
             >
               {versions.map((v, i) => (
                 <option key={v.version} value={i}>{v.label}</option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div className="flex items-center gap-2 ml-auto">
             {additions > 0 && (

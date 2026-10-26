@@ -10,6 +10,7 @@ const DiscoveryPage = React.lazy(() => import('../features/discovery/pages/Disco
 const LoginPage = React.lazy(() => import('../features/auth/pages/LoginPage'));
 const RegisterPage = React.lazy(() => import('../features/auth/pages/RegisterPage'));
 const AuthCallbackPage = React.lazy(() => import('../features/auth/pages/AuthCallbackPage'));
+const ResetPasswordPage = React.lazy(() => import('../features/auth/pages/ResetPasswordPage'));
 const AccountPage = React.lazy(() => import('../features/dashboard/pages/AccountPage'));
 const SettingsPage = React.lazy(() => import('../features/dashboard/pages/SettingsPage'));
 const EmbedPastePage = React.lazy(() => import('../features/pastes/pages/EmbedPastePage'));
@@ -48,6 +49,7 @@ export const router = createBrowserRouter(
         { path: 'login', element: <LoginPage /> },
         { path: 'register', element: <RegisterPage /> },
         { path: 'auth/callback', element: <AuthCallbackPage /> },
+        { path: 'auth/reset-password', element: <ResetPasswordPage /> },
         { path: 'account', element: <AccountPage /> },
         { path: 'settings', element: <SettingsPage /> },
         { path: '404', element: <NotFoundPage /> },

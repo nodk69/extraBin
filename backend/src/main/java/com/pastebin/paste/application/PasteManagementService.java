@@ -21,6 +21,7 @@ import com.pastebin.shared.errors.ForbiddenException;
 import com.pastebin.shared.errors.PayloadTooLargeException;
 import com.pastebin.shared.errors.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -37,16 +38,22 @@ public class PasteManagementService {
     private final PasteRevisionRepository pasteRevisionRepository;
 
     private final jakarta.persistence.EntityManager entityManager;
+    private final org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${pastebin.content.max-bytes:1048576}")
     private int maxContentBytes;
 
     public PasteManagementService(PasteRepository pasteRepository,
                                   PasteRevisionRepository pasteRevisionRepository,
-                                  jakarta.persistence.EntityManager entityManager) {
+                                  jakarta.persistence.EntityManager entityManager,
+                                  org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider,
+                                  ApplicationEventPublisher eventPublisher) {
         this.pasteRepository = pasteRepository;
         this.pasteRevisionRepository = pasteRevisionRepository;
         this.entityManager = entityManager;
+        this.meilisearchIndexServiceProvider = meilisearchIndexServiceProvider;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -203,6 +210,7 @@ public class PasteManagementService {
         // Apply modifications to paste metadata
         EditPasteFileItemRequest primaryReq = inputFiles.get(0);
         String primaryLang = PasteService.resolveLanguage(primaryReq.language(), primaryReq.filename().trim());
+        boolean wasPublic = paste.getVisibility() == Visibility.PUBLIC;
         paste.setTitle(request.title());
         paste.setContent(primaryReq.content());
         paste.setLanguage((request.language() == null || request.language().isBlank()) ? primaryLang : request.language().toLowerCase(Locale.ROOT));
@@ -255,6 +263,13 @@ public class PasteManagementService {
         }
 
         Paste updated = pasteRepository.saveAndFlush(paste);
+        if (wasPublic || updated.getVisibility() == Visibility.PUBLIC) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
+
+        if (meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().syncPaste(updated);
+        }
 
         List<PasteFileResponse> fileResponses = updated.getFiles().stream()
                 .map(f -> new PasteFileResponse(
@@ -292,7 +307,7 @@ public class PasteManagementService {
 
     @Transactional
     public void deleteOwnedPaste(String publicId, Long userId) {
-        Paste paste = pasteRepository.findActiveByPublicId(publicId, Instant.now())
+        Paste paste = pasteRepository.findActiveByPublicIdWithFiles(publicId, Instant.now())
                 .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
 
         if (!userId.equals(paste.getUserId())) {
@@ -301,6 +316,12 @@ public class PasteManagementService {
 
         pasteRevisionRepository.deleteByPasteId(paste.getId());
         pasteRepository.delete(paste);
+        if (paste.getVisibility() == Visibility.PUBLIC) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
+        if (meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().deletePaste(publicId);
+        }
     }
 
     @Transactional(readOnly = true)

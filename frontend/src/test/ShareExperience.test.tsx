@@ -208,9 +208,10 @@ describe('Sharing experience: primary copy-link and states', () => {
     vi.mocked(pasteApi.getPaste).mockResolvedValue(publicFixture);
 
     renderAt('/p/public123');
-    fireEvent.click(await primaryCopyLink());
+    const button = await primaryCopyLink();
+    fireEvent.click(button);
 
-    expect(await screen.findByText(/link copied/i)).toBeInTheDocument();
+    expect(await within(button).findByText('Copied')).toBeInTheDocument();
   });
 
   it('FE-SHARE-07: opens the manual-copy fallback with focused text when clipboard rejects', async () => {
@@ -232,10 +233,11 @@ describe('Sharing experience: primary copy-link and states', () => {
     writeText.mockRejectedValue(new Error('clipboard denied'));
 
     renderAt('/p/public123');
-    fireEvent.click(await primaryCopyLink());
+    const button = await primaryCopyLink();
+    fireEvent.click(button);
 
     await screen.findByRole('dialog', { name: /manual copy/i });
-    expect(screen.queryByText(/link copied/i)).not.toBeInTheDocument();
+    expect(within(button).queryByText('Copied')).not.toBeInTheDocument();
   });
 
   it('FE-SHARE-09: the primary copy action is keyboard focusable', async () => {

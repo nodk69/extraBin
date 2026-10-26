@@ -27,10 +27,12 @@ import {
   Star,
   ThumbsUp,
   ThumbsDown,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '../../auth/context/AuthContext';
 import { Icon } from '../../../components/ui/PaperIcon';
 import { Loading } from '../../../components/ui/Loading';
+import { NativeSelect } from '../../../components/ui/dropdown';
 import { triggerConfetti } from '../../../lib/confetti';
 import { pasteApi } from '../api/pasteApi';
 import { PasteView, PasteFileItem } from '../types/paste';
@@ -70,6 +72,7 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
   const [error, setError] = useState<string | null>(null);
   const [isFileCopied, setIsFileCopied] = useState(false);
   const [isLinkCopied, setIsLinkCopied] = useState(false);
+  const [isShareLinkCopied, setIsShareLinkCopied] = useState(false);
   const [isLineLinkCopied, setIsLineLinkCopied] = useState(false);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [wrapLines, setWrapLines] = useState(false);
@@ -703,7 +706,10 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
   const handleCopyShareLink = async () => {
     const url = buildShareUrl();
     setShowShareMenu(false);
-    await copyToClipboard(url, () => announceStatus('Link copied!'));
+    await copyToClipboard(url, () => {
+      setIsShareLinkCopied(true);
+      setTimeout(() => setIsShareLinkCopied(false), 2000);
+    });
   };
 
   const handleCopyMarkdownLink = async () => {
@@ -1441,8 +1447,38 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
   }
 
   // 4. Normal Viewing Surface
+  const fromTab = (location.state as { fromTab?: 'explore' | 'trending' | 'most-saved' } | null)?.fromTab;
+  const backTarget = fromTab && fromTab !== 'explore' ? `/explore?tab=${fromTab}` : '/explore';
+  const backLabel =
+    fromTab === 'trending'
+      ? 'Back to Trending'
+      : fromTab === 'most-saved'
+        ? 'Back to Most saved'
+        : 'Back to Explore';
+
+  const handleBackNavigation = () => {
+    if (window.history.length > 1 && fromTab) {
+      navigate(-1);
+    } else {
+      navigate(backTarget);
+    }
+  };
+
   return (
     <div className="workspace">
+      {/* Back button navigation */}
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={handleBackNavigation}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold text-[#555a53] hover:text-[#17201d] bg-[#eeece6] hover:bg-[#e4e1d8] border border-[#d8d4ca] rounded-md transition-all shadow-sm"
+          aria-label={backLabel}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>{backLabel}</span>
+        </button>
+      </div>
+
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 mb-5 border-b border-[#d8d4ca]">
         <div className="space-y-2">
@@ -1629,8 +1665,8 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
             aria-label="Copy link"
             title="Copy the canonical link to this paste"
           >
-            <LinkIcon className="w-3.5 h-3.5" />
-            <span>Copy link</span>
+            {isShareLinkCopied ? <Check className="w-3.5 h-3.5" /> : <LinkIcon className="w-3.5 h-3.5" />}
+            <span>{isShareLinkCopied ? 'Copied' : 'Copy link'}</span>
           </button>
 
           {/* Share menu: every way to hand this paste on */}
@@ -2245,12 +2281,12 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
               <label htmlFor="mobile-file-select" className="sr-only">
                 Select workspace file
               </label>
-              <select
+              <NativeSelect
                 id="mobile-file-select"
                 aria-label="Select workspace file"
                 value={files[safeActiveIndex]?.id !== undefined ? String(files[safeActiveIndex].id) : (files[safeActiveIndex]?.filename || 'default')}
-                onChange={(e) => {
-                  const targetId = e.target.value;
+                onChange={(val) => {
+                  const targetId = String(val);
                   const searchParams = new URLSearchParams(location.search);
                   const token = searchParams.get('token') || shareToken || paste.shareToken;
                   let targetUrl = `/p/${paste.id}/file/${encodeURIComponent(targetId)}`;
@@ -2269,7 +2305,7 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
                     </option>
                   );
                 })}
-              </select>
+              </NativeSelect>
             </div>
 
             {/* Desktop Sidebar Navigation */}
@@ -2366,10 +2402,12 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
 
             <div className="editor-type flex items-center gap-2">
               {isEditing ? (
-                <select
+                <NativeSelect
                   value={currentActiveFile.language || paste.language || 'plaintext'}
-                  onChange={(e) => handleLanguageChange(e.target.value)}
+                  onChange={(val) => handleLanguageChange(String(val))}
                   aria-label="Active file language"
+                  selectSize="sm"
+                  wrapperClassName="w-auto"
                   className="bg-[#121615] border border-[#2a322f] text-[#c6f05b] px-2 py-0.5 rounded font-mono text-xs focus:border-[#c6f05b] outline-none uppercase"
                 >
                   {LANGUAGES.map((l) => (
@@ -2377,7 +2415,7 @@ export const ViewPastePage: React.FC<ViewPastePageProps> = ({ initialPaste, past
                       {l.label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               ) : (
                 <>
                   <Icon name="code" size={14} />

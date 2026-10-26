@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon, IconName } from '../../../components/ui/PaperIcon';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
+import { Select, type SelectOption } from '../../../components/ui/dropdown';
 import { useAuth } from '../../auth/context/AuthContext';
 import { apiClient } from '../../../lib/api-client/client';
 import { accountApi } from '../api/accountApi';
@@ -281,13 +282,6 @@ export const SettingsPage: React.FC = () => {
             <Icon name="file" size={14} />
             <span>Pastes &amp; Folders</span>
           </Link>
-          <Link
-            to="/"
-            className="flex items-center gap-2 py-2 px-4 rounded-lg bg-[#ff5c3d] text-[#17201d] text-xs font-bold shadow-[2px_3px_0px_#17201d] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_4px_0px_#17201d] transition-all no-underline"
-          >
-            <Icon name="plus" size={14} />
-            <span>Create New Paste</span>
-          </Link>
         </div>
       </div>
 
@@ -491,17 +485,19 @@ export const SettingsPage: React.FC = () => {
                   <p className="text-[11px] text-[#74786f] font-mono m-0">
                     Choose whether newly initialized pastes default to Unlisted (tokenized), Public, or Private.
                   </p>
-                  <select
+                  <Select<Visibility>
                     id="default-visibility-select"
-                    aria-label="Default visibility"
+                    name="defaultVisibility"
+                    ariaLabel="Default visibility"
                     value={pasteDefaults.defaultVisibility}
-                    onChange={(e) => setPasteDefaults({ ...pasteDefaults, defaultVisibility: e.target.value as Visibility })}
-                    className="w-full p-2 text-xs font-mono rounded-lg border border-[#d5d0c5] bg-[#faf8f5] text-[#17201d] focus:outline-none focus:border-[#ff5c3d]"
-                  >
-                    <option value="UNLISTED">UNLISTED — Cryptographic share token required</option>
-                    <option value="PUBLIC">PUBLIC — Listed in public feeds and search</option>
-                    <option value="PRIVATE">PRIVATE — Visible exclusively to your authenticated account</option>
-                  </select>
+                    onChange={(val) => setPasteDefaults({ ...pasteDefaults, defaultVisibility: val })}
+                    options={[
+                      { value: 'UNLISTED', label: 'UNLISTED', description: 'Cryptographic share token required' },
+                      { value: 'PUBLIC', label: 'PUBLIC', description: 'Listed in public feeds and search' },
+                      { value: 'PRIVATE', label: 'PRIVATE', description: 'Visible exclusively to your authenticated account' },
+                    ]}
+                    menuWidth={320}
+                  />
                 </div>
 
                 <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] space-y-2">
@@ -511,22 +507,24 @@ export const SettingsPage: React.FC = () => {
                   <p className="text-[11px] text-[#74786f] font-mono m-0">
                     Default retention period applied when opening a new paste creation workstation.
                   </p>
-                  <select
+                  <Select<ExpirationPolicy>
                     id="default-expiration-select"
-                    aria-label="Default expiration"
+                    name="defaultExpiration"
+                    ariaLabel="Default expiration"
                     value={pasteDefaults.defaultExpiration}
-                    onChange={(e) => setPasteDefaults({ ...pasteDefaults, defaultExpiration: e.target.value as ExpirationPolicy })}
-                    className="w-full p-2 text-xs font-mono rounded-lg border border-[#d5d0c5] bg-[#faf8f5] text-[#17201d] focus:outline-none focus:border-[#ff5c3d]"
-                  >
-                    <option value="TEN_MINUTES">10 Minutes</option>
-                    <option value="ONE_HOUR">1 Hour</option>
-                    <option value="ONE_DAY">1 Day</option>
-                    <option value="ONE_WEEK">1 Week</option>
-                    <option value="ONE_MONTH">1 Month</option>
-                    <option value="SIX_MONTHS">6 Months</option>
-                    <option value="ONE_YEAR">1 Year</option>
-                    <option value="NEVER">Never (Permanent)</option>
-                  </select>
+                    onChange={(val) => setPasteDefaults({ ...pasteDefaults, defaultExpiration: val })}
+                    options={[
+                      { value: 'TEN_MINUTES', label: '10 Minutes', hint: '10m' },
+                      { value: 'ONE_HOUR', label: '1 Hour', hint: '1h' },
+                      { value: 'ONE_DAY', label: '1 Day', hint: '1d' },
+                      { value: 'ONE_WEEK', label: '1 Week', hint: '7d' },
+                      { value: 'ONE_MONTH', label: '1 Month', hint: '30d' },
+                      { value: 'SIX_MONTHS', label: '6 Months', hint: '180d' },
+                      { value: 'ONE_YEAR', label: '1 Year', hint: '365d' },
+                      { value: 'NEVER', label: 'Never (Permanent)', hint: '∞' },
+                    ]}
+                    menuWidth={280}
+                  />
                 </div>
 
                 <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] space-y-2">
@@ -536,26 +534,29 @@ export const SettingsPage: React.FC = () => {
                   <p className="text-[11px] text-[#74786f] font-mono m-0">
                     Syntax highlighting language applied when no file extension is detected.
                   </p>
-                  <select
+                  <Select
                     id="default-language-select"
-                    aria-label="Default syntax language"
+                    name="defaultLanguage"
+                    ariaLabel="Default syntax language"
                     value={pasteDefaults.defaultLanguage}
-                    onChange={(e) => setPasteDefaults({ ...pasteDefaults, defaultLanguage: e.target.value })}
-                    className="w-full p-2 text-xs font-mono rounded-lg border border-[#d5d0c5] bg-[#faf8f5] text-[#17201d] focus:outline-none focus:border-[#ff5c3d]"
-                  >
-                    <option value="plaintext">Plain Text</option>
-                    <option value="javascript">JavaScript (.js)</option>
-                    <option value="typescript">TypeScript (.ts)</option>
-                    <option value="python">Python (.py)</option>
-                    <option value="java">Java (.java)</option>
-                    <option value="go">Go (.go)</option>
-                    <option value="rust">Rust (.rs)</option>
-                    <option value="sql">SQL (.sql)</option>
-                    <option value="json">JSON (.json)</option>
-                    <option value="yaml">YAML (.yaml)</option>
-                    <option value="markdown">Markdown (.md)</option>
-                    <option value="bash">Bash / Shell (.sh)</option>
-                  </select>
+                    onChange={(val) => setPasteDefaults({ ...pasteDefaults, defaultLanguage: val })}
+                    searchable
+                    menuWidth={280}
+                    options={[
+                      { value: 'plaintext', label: 'Plain Text' },
+                      { value: 'javascript', label: 'JavaScript (.js)', hint: '.js' },
+                      { value: 'typescript', label: 'TypeScript (.ts)', hint: '.ts' },
+                      { value: 'python', label: 'Python (.py)', hint: '.py' },
+                      { value: 'java', label: 'Java (.java)', hint: '.java' },
+                      { value: 'go', label: 'Go (.go)', hint: '.go' },
+                      { value: 'rust', label: 'Rust (.rs)', hint: '.rs' },
+                      { value: 'sql', label: 'SQL (.sql)', hint: '.sql' },
+                      { value: 'json', label: 'JSON (.json)', hint: '.json' },
+                      { value: 'yaml', label: 'YAML (.yaml)', hint: '.yaml' },
+                      { value: 'markdown', label: 'Markdown (.md)', hint: '.md' },
+                      { value: 'bash', label: 'Bash / Shell (.sh)', hint: '.sh' },
+                    ]}
+                  />
                 </div>
 
                 <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] flex items-center justify-between gap-4">
@@ -659,17 +660,19 @@ export const SettingsPage: React.FC = () => {
                   <p className="text-[11px] text-[#74786f] font-mono m-0">
                     Text size applied to both the editor textarea layer and syntax overlay.
                   </p>
-                  <select
+                  <Select
                     id="editor-font-size-select"
-                    aria-label="Editor font size"
+                    name="fontSize"
+                    ariaLabel="Editor font size"
                     value={editorPrefs.fontSize}
-                    onChange={(e) => setEditorPrefs({ ...editorPrefs, fontSize: e.target.value as any })}
-                    className="w-full p-2 text-xs font-mono rounded-lg border border-[#d5d0c5] bg-[#faf8f5] text-[#17201d] focus:outline-none focus:border-[#ff5c3d]"
-                  >
-                    <option value="12px">12px — Compact</option>
-                    <option value="14px">14px — Standard Default</option>
-                    <option value="16px">16px — High Readability</option>
-                  </select>
+                    onChange={(val) => setEditorPrefs({ ...editorPrefs, fontSize: val as any })}
+                    options={[
+                      { value: '12px', label: '12px — Compact' },
+                      { value: '14px', label: '14px — Standard Default' },
+                      { value: '16px', label: '16px — High Readability' },
+                    ]}
+                    menuWidth={260}
+                  />
                 </div>
 
                 <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] space-y-2">
@@ -679,16 +682,18 @@ export const SettingsPage: React.FC = () => {
                   <p className="text-[11px] text-[#74786f] font-mono m-0">
                     Number of spaces inserted into the code editor when pressing the Tab key.
                   </p>
-                  <select
+                  <Select
                     id="editor-tab-size-select"
-                    aria-label="Editor tab indentation"
-                    value={editorPrefs.tabSize}
-                    onChange={(e) => setEditorPrefs({ ...editorPrefs, tabSize: Number(e.target.value) as 2 | 4 })}
-                    className="w-full p-2 text-xs font-mono rounded-lg border border-[#d5d0c5] bg-[#faf8f5] text-[#17201d] focus:outline-none focus:border-[#ff5c3d]"
-                  >
-                    <option value="2">2 Spaces</option>
-                    <option value="4">4 Spaces</option>
-                  </select>
+                    name="tabSize"
+                    ariaLabel="Editor tab indentation"
+                    value={String(editorPrefs.tabSize)}
+                    onChange={(val) => setEditorPrefs({ ...editorPrefs, tabSize: Number(val) as 2 | 4 })}
+                    options={[
+                      { value: '2', label: '2 Spaces' },
+                      { value: '4', label: '4 Spaces' },
+                    ]}
+                    menuWidth={200}
+                  />
                 </div>
 
                 <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] flex items-center justify-between gap-4">

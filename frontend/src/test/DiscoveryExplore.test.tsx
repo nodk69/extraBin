@@ -92,6 +92,7 @@ describe('DiscoveryPage Increment 1 (server-side search, tags, most-saved, attri
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, '', '/');
     (useAuth as any).mockReturnValue({
       user: null,
       isAuthenticated: false,
@@ -101,6 +102,10 @@ describe('DiscoveryPage Increment 1 (server-side search, tags, most-saved, attri
     vi.mocked(discoveryApi.getPublicTags).mockResolvedValue([]);
     vi.mocked(discoveryApi.getMostSaved).mockResolvedValue(emptyPage);
     vi.mocked(accountApi.getStarredPastes).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    window.history.pushState({}, '', '/');
   });
 
   const renderPage = () =>
@@ -129,7 +134,7 @@ describe('DiscoveryPage Increment 1 (server-side search, tags, most-saved, attri
     });
   });
 
-  it('DFP-02 tagChips_loadedFromPublicTags_setTagFilter', async () => {
+  it('DFP-02 tagDropdown_loadedFromPublicTags_setTagFilter', async () => {
     vi.mocked(discoveryApi.getPublicTags).mockResolvedValue([
       { name: 'spring', pasteCount: 2 },
       { name: 'sql', pasteCount: 1 },
@@ -137,11 +142,10 @@ describe('DiscoveryPage Increment 1 (server-side search, tags, most-saved, attri
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /#spring/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /#sql/ })).toBeInTheDocument();
+      expect(screen.getByLabelText('Popular tags')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /#spring/ }));
+    fireEvent.change(screen.getByLabelText('Popular tags'), { target: { value: 'spring' } });
 
     await waitFor(() => {
       const lastCall = vi.mocked(discoveryApi.getDiscovery).mock.calls[vi.mocked(discoveryApi.getDiscovery).mock.calls.length - 1];
@@ -292,12 +296,12 @@ describe('DiscoveryPage Increment 1 (server-side search, tags, most-saved, attri
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /#spring/ })).toBeInTheDocument();
+      expect(screen.getByLabelText('Popular tags')).toBeInTheDocument();
     });
 
     fireEvent.change(screen.getByLabelText('Search public snippets'), { target: { value: 'kafka' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    fireEvent.click(screen.getByRole('button', { name: /#spring/ }));
+    fireEvent.change(screen.getByLabelText('Popular tags'), { target: { value: 'spring' } });
     // Redesign: the empty state now also offers a clear action, so scope the query to the filter panel.
     const panel = screen.getByRole('region', { name: /search and filter/i });
     fireEvent.click(within(panel).getByRole('button', { name: /clear filters/i }));
@@ -307,6 +311,7 @@ describe('DiscoveryPage Increment 1 (server-side search, tags, most-saved, attri
       expect(lastCall[2]?.q).toBeFalsy();
       expect(lastCall[2]?.tag).toBeFalsy();
       expect((screen.getByLabelText('Search public snippets') as HTMLInputElement).value).toBe('');
+      expect((screen.getByLabelText('Popular tags') as HTMLSelectElement).value).toBe('all');
     });
   });
 });

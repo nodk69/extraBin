@@ -105,6 +105,16 @@ public class ExpirationCleanupScheduler {
                 log.warn("Failed to reap expired password reset tokens: {}", ex.getMessage());
             }
 
+            try {
+                Instant activityCutoff = now.minus(java.time.Duration.ofDays(30));
+                int purgedEvents = pastePurgeBatchService.purgeOldActivityEventsInNewTransaction(activityCutoff);
+                if (purgedEvents > 0) {
+                    log.info("Purged {} old trending activity event(s) older than {}.", purgedEvents, activityCutoff);
+                }
+            } catch (Exception ex) {
+                log.warn("Failed to reap old trending activity events: {}", ex.getMessage());
+            }
+
             return totalPurged;
         } finally {
             isRunning.set(false);

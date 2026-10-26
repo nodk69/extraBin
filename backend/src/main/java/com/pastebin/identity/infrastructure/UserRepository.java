@@ -23,6 +23,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByEmail(String email);
 
+    @Query("SELECT u.id, u.username FROM User u WHERE u.id IN :ids")
+    java.util.List<Object[]> findUsernamesByIds(@Param("ids") java.util.Collection<Long> ids);
+
     @Query("SELECT u.sessionVersion FROM User u WHERE u.id = :id")
     Optional<Long> findSessionVersionById(@Param("id") Long id);
 
@@ -47,8 +50,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     @Modifying
     @Query(value = """
-            INSERT INTO users (username, email, password_hash, role, email_verified)
-            VALUES (:username, :email, :passwordHash, 'ROLE_USER', TRUE)
+            INSERT INTO users (username, email, password_hash, role, email_verified, notify_on_replies, session_version, created_at, updated_at)
+            VALUES (:username, :email, :passwordHash, 'ROLE_USER', TRUE, TRUE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT DO NOTHING
             """, nativeQuery = true)
     int insertIfAbsent(@Param("username") String username,

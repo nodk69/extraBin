@@ -1,0 +1,1 @@
+export { PasteHeader } from './PasteHeader';

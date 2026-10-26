@@ -252,33 +252,18 @@
   color: #74786f;
 }
 
-.discovery-select {
-  appearance: none;
-  height: 38px;
-  min-width: 148px;
+.discovery-select,
+.discovery-select-wrapper {
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
-  padding: 0 30px 0 12px;
-  border: 1px solid #d5d0c5;
+}
+
+.discovery-native-select {
+  height: 38px;
+  min-width: 130px;
+  max-width: 100%;
   border-radius: 10px;
-  background-color: #ffffff;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2374786f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  color: var(--ink);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.discovery-select:hover {
-  border-color: #8c8980;
-}
-
-.discovery-select:focus-visible {
-  outline: 0;
-  border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgba(255, 92, 61, 0.15);
 }
 
 /* ------------------------------------------------------------- Tag cloud -- */
@@ -479,11 +464,13 @@
 }
 
 @keyframes discovery-pulse {
+
   0%,
   100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.4;
     transform: scale(0.7);
@@ -961,6 +948,7 @@
 
 /* ------------------------------------------------- Introduction of motion -- */
 @media (prefers-reduced-motion: reduce) {
+
   .discovery-card,
   .discovery-grid,
   .discovery-create,

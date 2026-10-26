@@ -1,0 +1,99 @@
+# performance-tests/artillery/tests/smoke.yml
+#
+# Stage A - smoke test (port of performance-tests/k6/tests/smoke.js).
+# 1 VU -> 2 VUs over ~2 minutes, mixing reads, a discovery fetch and one
+# CSRF-protected anonymous write per VU.
+#
+# On the production target the anonymous create limiter allows 30 writes per
+# hour per IP, so 429s after the first ~30 arrivals are the EXPECTED outcome
+# and are reported as `http.codes.429` in the summary.
+#
+#   artillery run --env-file .env tests/smoke.yml
+
+config:
+  target: "{{ $env.API_URL }}"
+  http:
+    timeout: 60
+  processor: "./lib/processors.js"
+  plugins:
+    ensure: {}
+  ensure:
+    thresholds:
+      - "http.codes.5xx == 0"
+      - "http.response_time.p95 < 5000"
+  phases:
+    - duration: 30
+      arrivalRate: 1
+      name: "warmup"
+    - duration: 60
+      arrivalRate: 2
+      name: "steady"
+    - duration: 10
+      arrivalRate: 0
+      name: "drain"
+
+before:
+  flow:
+    - log: "Warming up {{ $env.API_URL }}"
+    - get:
+        url: "/auth/me"
+        capture:
+          - header: "x-csrf-token"
+            as: "csrf"
+        strict: false
+
+scenarios:
+  - name: "read and write smoke"
+    flow:
+      # Bootstrap this VU's CSRF token. The token is bound to the session
+      # cookie this request sets, so it has to be captured per VU.
+      - get:
+          url: "/auth/me"
+          capture:
+            - header: "x-csrf-token"
+              as: "csrf"
+          strict: false
+
+      - get:
+          url: "/pastes/{{ $env.PASTE_ID }}"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+      - get:
+          url: "/pastes/{{ $env.PASTE_ID }}/raw"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+      - get:
+          url: "/pastes/{{ $env.PASTE_ID }}.json"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+      - get:
+          url: "/discovery"
+          qs:
+            page: 0
+            size: 20
+          expect:
+            - statusCode: 200
+      - think: 2
+
+      # Anonymous paste creation. 201 while under the hourly limit, 429 once
+      # the limiter bites - both are acceptable, 5xx is not.
+      - post:
+          url: "/pastes"
+          headers:
+            Content-Type: "application/json"
+            X-XSRF-TOKEN: "{{ csrf }}"
+          json:
+            title: "{{ uniqueTitle() }}"
+            content: "// artillery-loadtest fixture\nconsole.log('hello artillery');\n"
+            language: "javascript"
+            visibility: "PUBLIC"
+            # ONE_HOUR (not NEVER) so the backend's 5-minute
+            # ExpirationCleanupScheduler purges the fixture pastes
+            # automatically. Rollback = wait ~65 min, no manual SQL.
+            expiration: "ONE_HOUR"

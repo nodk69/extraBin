@@ -36,6 +36,7 @@ import com.pastebin.paste.domain.ShareTokenUtil;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +89,10 @@ public class PasteService {
     @Value("${pastebin.share.public-base-url:http://localhost:5173}")
     private String publicBaseUrl = "http://localhost:5173";
 
+    private final org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.application.PasteActivityIngestionService> activityIngestionService;
+    private final org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider;
+    private final ApplicationEventPublisher eventPublisher;
+
     @org.springframework.beans.factory.annotation.Autowired
     public PasteService(PasteRepository pasteRepository,
                         FolderRepository folderRepository,
@@ -98,7 +103,10 @@ public class PasteService {
                         PasteVoteRepository pasteVoteRepository,
                         PasteStarRepository pasteStarRepository,
                         org.springframework.beans.factory.ObjectProvider<LibraryService> libraryService,
-                        UnlockTokenService unlockTokenService) {
+                        UnlockTokenService unlockTokenService,
+                        org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.application.PasteActivityIngestionService> activityIngestionService,
+                        org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider,
+                        ApplicationEventPublisher eventPublisher) {
         this.pasteRepository = pasteRepository;
         this.folderRepository = folderRepository;
         this.nanoIdGenerator = nanoIdGenerator;
@@ -109,6 +117,9 @@ public class PasteService {
         this.pasteStarRepository = pasteStarRepository;
         this.libraryService = libraryService.getIfAvailable();
         this.unlockTokenService = unlockTokenService;
+        this.activityIngestionService = activityIngestionService;
+        this.meilisearchIndexServiceProvider = meilisearchIndexServiceProvider;
+        this.eventPublisher = eventPublisher;
     }
 
     @jakarta.annotation.PostConstruct
@@ -131,7 +142,7 @@ public class PasteService {
                         PasswordEncoder passwordEncoder,
                         PasteVoteRepository pasteVoteRepository,
                         PasteStarRepository pasteStarRepository) {
-        this(pasteRepository, folderRepository, nanoIdGenerator, rateLimiterService, passwordEncoder, new SimpleMeterRegistry(), pasteVoteRepository, pasteStarRepository, null, null);
+        this(pasteRepository, folderRepository, nanoIdGenerator, rateLimiterService, passwordEncoder, new SimpleMeterRegistry(), pasteVoteRepository, pasteStarRepository, null, null, null, null, event -> { });
     }
 
     @Transactional
@@ -287,6 +298,14 @@ public class PasteService {
         }
 
         pasteRepository.save(paste);
+
+        if (paste.getVisibility() == Visibility.PUBLIC) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
+
+        if (meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().syncPaste(paste);
+        }
 
         return new CreatePasteResponse(
                 paste.getPublicId(),
@@ -583,6 +602,9 @@ public class PasteService {
         } else {
             pasteRepository.incrementViews(paste.getId());
             currentViews = paste.getViews() + 1L;
+            if (activityIngestionService != null && activityIngestionService.getIfAvailable() != null) {
+                activityIngestionService.getIfAvailable().recordViewEvent(paste, authenticatedUserId, clientIp);
+            }
         }
 
         List<PasteFileResponse> fileResponses = resolveFileResponses(paste);
@@ -1342,7 +1364,7 @@ public class PasteService {
     public void deleteAnonymousPaste(String publicId, String deletionCapability, String clientIp) {
         rateLimiterService.checkRateLimit("del_attempt:ip:" + clientIp, 5, 900);
 
-        Paste paste = pasteRepository.findActiveByPublicId(publicId, Instant.now())
+        Paste paste = pasteRepository.findActiveByPublicIdWithFiles(publicId, Instant.now())
                 .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
 
         if (!paste.isAnonymous() || paste.getDeletionCapabilityHash() == null) {
@@ -1354,6 +1376,12 @@ public class PasteService {
         }
 
         pasteRepository.delete(paste);
+        if (paste.getVisibility() == Visibility.PUBLIC) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
+        if (meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().deletePaste(publicId);
+        }
     }
 
     @Transactional
@@ -1388,6 +1416,9 @@ public class PasteService {
 
         paste.setPublicId(cleanSlug);
         pasteRepository.save(paste);
+        if (paste.getVisibility() == Visibility.PUBLIC) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
         return cleanSlug;
     }
 

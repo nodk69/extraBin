@@ -42,7 +42,10 @@
   color: var(--s-ink);
   border: 1.5px solid var(--s-line);
   border-radius: 10px;
-  font: 600 13px/1 inherit;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
   text-align: left;
   cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
@@ -106,6 +109,14 @@
   gap: 6px;
 }
 
+.pp-sel__label-full {
+  display: inline;
+}
+
+.pp-sel__label-short {
+  display: none;
+}
+
 .pp-sel__value.is-placeholder {
   color: var(--s-muted);
   font-weight: 500;
@@ -113,7 +124,10 @@
 
 .pp-sel__hint {
   flex: none;
-  font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
   color: var(--s-muted);
   padding: 3px 6px;
   border-radius: 5px;
@@ -149,7 +163,7 @@
   border-radius: 12px;
   box-shadow: var(--s-pop-shadow);
   overflow: hidden;
-  font-family: inherit;
+  font-family: "DM Sans", system-ui, -apple-system, sans-serif;
   transform-origin: top center;
   animation: pp-sel-in .18s cubic-bezier(.3,1.25,.5,1) both;
   box-sizing: border-box;
@@ -191,7 +205,9 @@
   border: 1.5px solid var(--s-line);
   background: transparent;
   color: var(--s-ink);
-  font: 500 12.5px/1 inherit;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
   outline: none;
   box-sizing: border-box;
 }
@@ -242,6 +258,7 @@
   min-height: 38px;
   border-radius: 8px;
   cursor: pointer;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   user-select: none;
@@ -294,6 +311,7 @@
 }
 
 .pp-sel__label {
+  font-family: inherit;
   font-size: 13px;
   line-height: 1.3;
   color: var(--s-ink);
@@ -302,7 +320,9 @@
 }
 
 .pp-sel__desc {
-  font: 400 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  line-height: 1.35;
   color: var(--s-muted);
   white-space: normal;
   word-break: break-word;

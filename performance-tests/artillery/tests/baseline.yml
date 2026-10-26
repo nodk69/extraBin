@@ -1,0 +1,104 @@
+# performance-tests/artillery/tests/baseline.yml
+#
+# Stage B - baseline (port of performance-tests/k6/tests/baseline.js).
+# Read-only workload ramped 1 -> 5 -> 10 arrivals/second. Establishes
+# cold-start versus steady-state latency and the natural error baseline.
+#
+# Read-only on purpose: writes would trip the anonymous create limiter and
+# pollute the baseline with 429s that have nothing to do with latency.
+#
+#   artillery run --env-file .env tests/baseline.yml
+
+config:
+  target: "{{ $env.API_URL }}"
+  http:
+    timeout: 60
+  processor: "./lib/processors.js"
+  plugins:
+    ensure: {}
+  ensure:
+    thresholds:
+      - "http.codes.5xx == 0"
+      - "http.response_time.p95 < 5000"
+      - "http.response_time.p99 < 15000"
+  phases:
+    - duration: 30
+      arrivalRate: 1
+      name: "1 per second"
+    - duration: 60
+      arrivalRate: 1
+      name: "1 per second steady"
+    - duration: 30
+      arrivalRate: 5
+      name: "ramp to 5"
+    - duration: 60
+      arrivalRate: 5
+      name: "5 per second steady"
+    - duration: 30
+      arrivalRate: 10
+      name: "ramp to 10"
+    - duration: 60
+      arrivalRate: 10
+      name: "10 per second steady"
+    - duration: 10
+      arrivalRate: 0
+      name: "drain"
+
+before:
+  flow:
+    - log: "Warming up {{ $env.API_URL }}"
+    - get:
+        url: "/auth/me"
+        strict: false
+
+scenarios:
+  # Workload mix mirrors the k6 suite: 55% paste view, 15% raw, 5% typed,
+  # 5% download, 10% discovery, 10% write. The write scenario is dropped
+  # here so the baseline measures reads only.
+  - name: "paste view"
+    weight: 55
+    flow:
+      - get:
+          url: "/pastes/{{ $env.PASTE_ID }}"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+  - name: "raw content"
+    weight: 15
+    flow:
+      - get:
+          url: "/pastes/{{ $env.PASTE_ID }}/raw"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+  - name: "typed api"
+    weight: 5
+    flow:
+      - get:
+          url: "/pastes/{{ $env.PASTE_ID }}.json"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+  - name: "download"
+    weight: 5
+    flow:
+      - get:
+          url: "/pastes/{{ $env.PASTE_ID }}/download"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+  - name: "discovery feed"
+    weight: 20
+    flow:
+      - get:
+          url: "/discovery"
+          qs:
+            page: "{{ randomPage(3) }}"
+            size: 20
+          expect:
+            - statusCode: 200
+      - think: 2

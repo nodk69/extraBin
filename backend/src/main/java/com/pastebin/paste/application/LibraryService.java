@@ -30,13 +30,19 @@ public class LibraryService {
     private final PasteRepository pasteRepository;
     private final TagRepository tagRepository;
     private final PasteViewHistoryRepository pasteViewHistoryRepository;
+    private final org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public LibraryService(PasteRepository pasteRepository,
                           TagRepository tagRepository,
-                          PasteViewHistoryRepository pasteViewHistoryRepository) {
+                          PasteViewHistoryRepository pasteViewHistoryRepository,
+                          org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider,
+                          org.springframework.context.ApplicationEventPublisher eventPublisher) {
         this.pasteRepository = pasteRepository;
         this.tagRepository = tagRepository;
         this.pasteViewHistoryRepository = pasteViewHistoryRepository;
+        this.meilisearchIndexServiceProvider = meilisearchIndexServiceProvider;
+        this.eventPublisher = eventPublisher;
     }
 
     // =========================================================================
@@ -77,6 +83,14 @@ public class LibraryService {
 
         paste.getTags().add(tag);
 
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
+
+        if (meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().syncPaste(paste);
+        }
+
         return new TagResponse(tag.getId(), tag.getName());
     }
 
@@ -101,6 +115,14 @@ public class LibraryService {
         }
 
         paste.getTags().remove(tag);
+
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
+
+        if (meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().syncPaste(paste);
+        }
     }
 
     @Transactional(readOnly = true)

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Icon } from '../../../components/ui/PaperIcon';
+import { Select } from '../../../components/ui/dropdown';
 import { resolvePublicBaseUrl } from '../lib/shareUrl';
 
 interface EmbedModalProps {
@@ -100,16 +101,18 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
           <label htmlFor="embed-height-select" className="font-bold text-[#17201d]">
             Frame Height:
           </label>
-          <select
+          <Select
             id="embed-height-select"
             value={embedHeight}
-            onChange={(e) => setEmbedHeight(e.target.value)}
-            className="controls-input text-xs font-mono py-1 px-2"
-          >
-            <option value="300">300 px (Compact)</option>
-            <option value="450">450 px (Standard)</option>
-            <option value="600">600 px (Extended)</option>
-          </select>
+            onChange={(val) => setEmbedHeight(String(val))}
+            size="sm"
+            className="w-auto"
+            options={[
+              { value: '300', label: '300 px (Compact)' },
+              { value: '450', label: '450 px (Standard)' },
+              { value: '600', label: '600 px (Extended)' },
+            ]}
+          />
         </div>
 
         {/* Copyable HTML Snippet */}

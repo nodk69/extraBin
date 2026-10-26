@@ -1,0 +1,102 @@
+/* Centralized Dropdown & Select styling matching ExtraBin Neo-Brutalist design tokens */
+
+/* Native Select Wrapper */
+.extrabin-native-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+}
+
+.extrabin-native-select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--surface, #ffffff);
+  color: var(--ink, #17201d);
+  border: 1.5px solid var(--line, #d5d0c5);
+  border-radius: 8px;
+  padding: 8px 32px 8px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.extrabin-native-select:focus {
+  border-color: var(--coral, #ff5c3d);
+  box-shadow: 0 0 0 2px rgba(255, 92, 61, 0.2);
+}
+
+.extrabin-native-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--card-bg, #ebe7dc);
+}
+
+.extrabin-native-select--sm .extrabin-native-select {
+  padding: 4px 26px 4px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+.extrabin-native-select--surface .extrabin-native-select {
+  background-color: var(--bg, #fcfbf7);
+}
+
+.extrabin-native-select__chev {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted, #74786f);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* DropdownMenu Content Popover */
+.extrabin-dropdown-menu {
+  background-color: var(--bg, #fcfbf7);
+  border: 2px solid var(--ink, #17201d);
+  border-radius: 12px;
+  box-shadow: 4px 4px 0px var(--shadow, #17201d);
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  animation: extrabin-dropdown-in 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes extrabin-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .extrabin-dropdown-menu {
+    animation: none !important;
+  }
+}
+
+/* Ensure native select elements never force horizontal layout overflow on narrow viewports */
+@media (max-width: 640px) {
+  .extrabin-native-select-wrapper {
+    max-width: 100%;
+  }
+
+  .extrabin-native-select {
+    max-width: 100%;
+    text-overflow: ellipsis;
+  }
+}

@@ -56,4 +56,20 @@ export const discoveryApi = {
     });
     return response.data;
   },
+
+  async getTrending(
+    page = 0,
+    size = 18,
+    window: '24h' | '7d' | '30d' = '24h',
+    language?: string,
+    signal?: AbortSignal
+  ): Promise<PagedResponse<PasteSummary>> {
+    const params: Record<string, string | number> = { page, size, window };
+    if (language && language !== 'all') params.language = language;
+    const response = await apiClient.get<PagedResponse<PasteSummary>>('/discovery/trending', {
+      params,
+      signal,
+    });
+    return response.data;
+  },
 };

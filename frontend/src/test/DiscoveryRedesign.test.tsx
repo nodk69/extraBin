@@ -103,6 +103,7 @@ describe('DiscoveryPage redesign contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     asGuest();
+    window.history.pushState({}, '', '/');
     vi.mocked(discoveryApi.getDiscovery).mockResolvedValue(makePage([]));
     vi.mocked(discoveryApi.getPublicTags).mockResolvedValue([]);
     vi.mocked(discoveryApi.getMostSaved).mockResolvedValue(makePage([]));
@@ -110,6 +111,7 @@ describe('DiscoveryPage redesign contract', () => {
   });
 
   afterEach(() => {
+    window.history.pushState({}, '', '/');
     vi.restoreAllMocks();
   });
 
@@ -119,7 +121,6 @@ describe('DiscoveryPage redesign contract', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Explore public pastes' })).toBeInTheDocument();
     expect(screen.getByText(/COMMUNITY \/ DISCOVER/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Create paste' })).toHaveAttribute('href', '/');
 
     const tabNav = screen.getByRole('navigation', { name: 'Discovery views' });
     const explore = within(tabNav).getByRole('button', { name: 'Explore' });
@@ -163,11 +164,11 @@ describe('DiscoveryPage redesign contract', () => {
   it('RED-D04 clearFilters_restoresLanguageQueryAndDefaults', async () => {
     vi.mocked(discoveryApi.getPublicTags).mockResolvedValue([{ name: 'spring', pasteCount: 2 }]);
     renderPage();
-    await screen.findByRole('button', { name: /#spring/ });
+    await screen.findByLabelText('Popular tags');
 
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'javascript' } });
     submitSearch('kafka');
-    await screen.findByRole('button', { name: /#spring/ });
+    fireEvent.change(screen.getByLabelText('Popular tags'), { target: { value: 'spring' } });
 
     const panel = screen.getByRole('region', { name: /search and filter/i });
     fireEvent.click(within(panel).getByRole('button', { name: /clear filters/i }));
@@ -176,22 +177,25 @@ describe('DiscoveryPage redesign contract', () => {
       const last = lastDiscoveryCall();
       expect(last[2]?.q).toBeFalsy();
       expect(last[2]?.language).toBeFalsy();
+      expect(last[2]?.tag).toBeFalsy();
       expect((screen.getByLabelText('Search public snippets') as HTMLInputElement).value).toBe('');
       expect((screen.getByLabelText('Language') as HTMLSelectElement).value).toBe('all');
+      expect((screen.getByLabelText('Popular tags') as HTMLSelectElement).value).toBe('all');
     });
   });
 
-  it('RED-D05 popularTagChip_togglesSelectionOnAndOff', async () => {
+  it('RED-D05 popularTagsDropdown_selectsAndClearsTagFilter', async () => {
     vi.mocked(discoveryApi.getPublicTags).mockResolvedValue([{ name: 'spring', pasteCount: 2 }]);
     renderPage();
 
-    const chip = await screen.findByRole('button', { name: /#spring/ });
-    fireEvent.click(chip);
+    await waitFor(() => {
+      expect(screen.getByLabelText('Popular tags')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('Popular tags'), { target: { value: 'spring' } });
     await waitFor(() => expect(lastDiscoveryCall()[2]).toEqual(expect.objectContaining({ tag: 'spring' })));
 
-    const selected = screen.getByRole('button', { name: /#spring/ });
-    expect(selected).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(selected);
+    fireEvent.change(screen.getByLabelText('Popular tags'), { target: { value: 'all' } });
     await waitFor(() => expect(lastDiscoveryCall()[2]?.tag).toBeFalsy());
   });
 
@@ -199,7 +203,7 @@ describe('DiscoveryPage redesign contract', () => {
     vi.mocked(discoveryApi.getPublicTags).mockResolvedValue([{ name: 'spring', pasteCount: 2 }]);
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /#spring/ }));
+    fireEvent.change(await screen.findByLabelText('Popular tags'), { target: { value: 'spring' } });
     const remove = await screen.findByRole('button', { name: /remove tag filter spring/i });
     fireEvent.click(remove);
 

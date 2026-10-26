@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './app/App';
 import './styles/index.css';
+import './styles/responsive.css';
 
 // Initialize Sentry error tracking. DSN is injected via Vite environment variable.
 // Leave VITE_SENTRY_DSN empty in development to disable Sentry.

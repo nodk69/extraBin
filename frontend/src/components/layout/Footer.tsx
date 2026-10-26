@@ -19,21 +19,6 @@ export const Footer: React.FC = () => {
           <a href="/swagger-ui.html" target="_blank" rel="noopener noreferrer" className="hover:text-slate-300 transition-colors">
             OpenAPI Docs
           </a>
-          <span>•</span>
-          <a
-            href="https://ko-fi.com/W0K122693O"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center hover:opacity-90 transition-opacity"
-            title="Buy Me a Coffee at ko-fi.com"
-          >
-            <img
-              height="28"
-              style={{ border: '0px', height: '28px' }}
-              src="https://storage.ko-fi.com/cdn/kofi6.png?v=6"
-              alt="Buy Me a Coffee at ko-fi.com"
-            />
-          </a>
         </div>
       </div>
     </footer>

@@ -1,16 +1,26 @@
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:h2:mem:pastebindb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE}
-    username: ${DATABASE_USERNAME:sa}
-    password: ${DATABASE_PASSWORD:}
-    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/pastebin}
+    username: ${SPRING_DATASOURCE_USERNAME:neondb_owner}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
   jpa:
-    database-platform: ${JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
   flyway:
     clean-disabled: false
+    enabled: true
+    locations: classpath:db/migration
 
 logging:
   level:

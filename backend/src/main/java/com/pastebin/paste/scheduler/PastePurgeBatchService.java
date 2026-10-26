@@ -16,12 +16,21 @@ import java.util.List;
 public class PastePurgeBatchService {
 
     private final PasteRepository pasteRepository;
+    private final com.pastebin.paste.infrastructure.PasteFileRepository pasteFileRepository;
     private final com.pastebin.identity.infrastructure.PasswordResetTokenRepository passwordResetTokenRepository;
+    private final com.pastebin.paste.infrastructure.PasteActivityEventRepository activityEventRepository;
+    private final org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider;
 
     public PastePurgeBatchService(PasteRepository pasteRepository,
-                                  com.pastebin.identity.infrastructure.PasswordResetTokenRepository passwordResetTokenRepository) {
+                                  com.pastebin.paste.infrastructure.PasteFileRepository pasteFileRepository,
+                                  com.pastebin.identity.infrastructure.PasswordResetTokenRepository passwordResetTokenRepository,
+                                  com.pastebin.paste.infrastructure.PasteActivityEventRepository activityEventRepository,
+                                  org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider) {
         this.pasteRepository = pasteRepository;
+        this.pasteFileRepository = pasteFileRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.activityEventRepository = activityEventRepository;
+        this.meilisearchIndexServiceProvider = meilisearchIndexServiceProvider;
     }
 
     /**
@@ -36,7 +45,13 @@ public class PastePurgeBatchService {
         if (expiredIds == null || expiredIds.isEmpty()) {
             return 0;
         }
-        return pasteRepository.deletePastesByIds(expiredIds);
+        List<String> publicIds = pasteRepository.findPublicIdsByIds(expiredIds);
+        pasteFileRepository.deleteByPasteIds(expiredIds);
+        int deletedCount = pasteRepository.deletePastesByIds(expiredIds);
+        if (deletedCount > 0 && meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().deletePastes(publicIds);
+        }
+        return deletedCount;
     }
 
     /**
@@ -45,5 +60,13 @@ public class PastePurgeBatchService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int purgeExpiredTokensInNewTransaction(java.time.Instant now) {
         return passwordResetTokenRepository.deleteExpiredOrUsedTokens(now);
+    }
+
+    /**
+     * Purges activity events older than 30 days in an independent transaction.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int purgeOldActivityEventsInNewTransaction(java.time.Instant cutoff) {
+        return activityEventRepository.deleteEventsOlderThan(cutoff);
     }
 }

@@ -182,20 +182,54 @@ public class AuthService {
     public String requestPasswordReset(PasswordResetRequest request, String clientIp) {
         rateLimiterService.checkRateLimit("pwd_reset:ip:" + clientIp, 5, 900);
 
-        userRepository.findByEmail(request.email().toLowerCase().trim()).ifPresent(user -> {
-            // P1-13: invalidate ALL outstanding tokens for the user when a new one is issued.
-            passwordResetTokenRepository.deleteByUserId(user.getId());
-
-            String rawToken = DeletionCapabilityUtil.generateCapability();
-            String tokenHash = DeletionCapabilityUtil.hashCapability(rawToken);
-            Instant expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES);
-
-            PasswordResetToken resetToken = new PasswordResetToken(user.getId(), tokenHash, expiresAt);
-            passwordResetTokenRepository.save(resetToken);
-        });
+        String email = request.email().toLowerCase().trim();
+        
+        // Check if user exists locally (for anti-enumeration, we proceed even if not found)
+        boolean userExists = userRepository.findByEmail(email).isPresent();
+        
+        if (userExists) {
+            // Delegate password reset to Supabase which handles email delivery
+            sendPasswordResetViaSupabase(email);
+        }
 
         // Always return generic response to prevent account enumeration
         return "If the account exists, password reset instructions have been dispatched.";
+    }
+
+    private void sendPasswordResetViaSupabase(String email) {
+        if (supabaseUrl == null || supabaseUrl.isBlank() || supabaseAnonKey == null || supabaseAnonKey.isBlank()) {
+            log.warn("Cannot send password reset email: Supabase is not configured");
+            return;
+        }
+
+        try {
+            // Use Supabase's password recovery endpoint with redirect to our reset page
+            Map<String, Object> body = Map.of(
+                "email", email,
+                "redirect_to", "http://localhost:5173/auth/reset-password"
+            );
+            String json = objectMapper.writeValueAsString(body);
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(supabaseUrl + "/auth/v1/recover"))
+                    .header("apikey", supabaseAnonKey)
+                    .header("Authorization", "Bearer " + supabaseAnonKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .timeout(Duration.ofSeconds(10))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                log.info("Password reset email sent to {} via Supabase", email);
+            } else {
+                log.warn("Failed to send password reset email via Supabase: status={}, body={}", 
+                    response.statusCode(), response.body());
+            }
+        } catch (Exception e) {
+            log.error("Error sending password reset email to {} via Supabase: {}", email, e.getMessage());
+        }
     }
 
     @Transactional

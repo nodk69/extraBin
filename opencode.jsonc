@@ -1,0 +1,117 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // The master policy and security invariants are loaded into every session.
+  // Domain rules under .agents/rules/ stay on demand via skills and docs.
+  "instructions": [
+    ".agents/rules/00-master-engineering-policy.md",
+    ".agents/rules/10-security-policy.md"
+  ],
+
+  // Deterministic command-safety gate. Rules are evaluated in order and the
+  // last match wins, so the hard denies live at the end. This is
+  // defense-in-depth: the master policy, CI and scripts/engineering/verify.mjs
+  // remain authoritative.
+  "permissions": [
+    // Never load secrets into the model context through the read tool.
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+    { "action": "read", "resource": "*.env.*", "effect": "deny" },
+    { "action": "read", "resource": "*.env.example", "effect": "allow" },
+    { "action": "read", "resource": "cookie*.txt", "effect": "deny" },
+    { "action": "read", "resource": "cookies.txt", "effect": "deny" },
+    { "action": "read", "resource": "*.pem", "effect": "deny" },
+    { "action": "read", "resource": "*.key", "effect": "deny" },
+    { "action": "read", "resource": "*.p12", "effect": "deny" },
+    { "action": "read", "resource": "*.pfx", "effect": "deny" },
+    { "action": "read", "resource": "*.git-credentials*", "effect": "deny" },
+    { "action": "read", "resource": "*.npmrc*", "effect": "deny" },
+    { "action": "read", "resource": "*/.aws/credentials*", "effect": "deny" },
+    { "action": "read", "resource": "*/.ssh/id_*", "effect": "deny" },
+    { "action": "read", "resource": "*id_rsa*", "effect": "deny" },
+    { "action": "read", "resource": "*id_ed25519*", "effect": "deny" },
+    { "action": "read", "resource": "*id_ecdsa*", "effect": "deny" },
+    { "action": "edit", "resource": "*.env", "effect": "deny" },
+    { "action": "edit", "resource": "*.pem", "effect": "deny" },
+    { "action": "edit", "resource": "*.key", "effect": "deny" },
+
+    // Consequential or data-destroying actions: explicit approval each time.
+    { "action": "shell", "resource": "git push*", "effect": "ask" },
+    { "action": "shell", "resource": "git reset --hard*", "effect": "ask" },
+    { "action": "shell", "resource": "git clean *", "effect": "ask" },
+    { "action": "shell", "resource": "git checkout -- *", "effect": "ask" },
+    { "action": "shell", "resource": "git restore *", "effect": "ask" },
+    { "action": "shell", "resource": "gh pr merge*", "effect": "ask" },
+    { "action": "shell", "resource": "gh release create*", "effect": "ask" },
+    { "action": "shell", "resource": "npm publish*", "effect": "ask" },
+    { "action": "shell", "resource": "mvn deploy*", "effect": "ask" },
+    { "action": "shell", "resource": "docker push*", "effect": "ask" },
+    { "action": "shell", "resource": "docker system prune*", "effect": "ask" },
+    { "action": "shell", "resource": "docker volume rm*", "effect": "ask" },
+    { "action": "shell", "resource": "rm -rf *", "effect": "ask" },
+    { "action": "shell", "resource": "rm -fr *", "effect": "ask" },
+    { "action": "shell", "resource": "rm -r *", "effect": "ask" },
+    { "action": "shell", "resource": "*remove-item*-recurse*", "effect": "ask" },
+    { "action": "shell", "resource": "*remove-item*-force*", "effect": "ask" },
+    { "action": "shell", "resource": "*del /s*", "effect": "ask" },
+    { "action": "shell", "resource": "*rd /s*", "effect": "ask" },
+    { "action": "shell", "resource": "*rmdir /s*", "effect": "ask" },
+    { "action": "shell", "resource": "truncate table*", "effect": "ask" },
+    { "action": "shell", "resource": "flyway clean*", "effect": "ask" },
+    { "action": "shell", "resource": "chmod 777*", "effect": "ask" },
+    { "action": "shell", "resource": "sudo *", "effect": "ask" },
+
+    // Hard denies: keep these last so they override the broader ask rules.
+    { "action": "shell", "resource": "git push --force*", "effect": "deny" },
+    { "action": "shell", "resource": "git push -f*", "effect": "deny" },
+    { "action": "shell", "resource": "git push * --force*", "effect": "deny" },
+    { "action": "shell", "resource": "git push * -f *", "effect": "deny" },
+    { "action": "shell", "resource": "git push *-f", "effect": "deny" },
+    { "action": "shell", "resource": "git push * +*", "effect": "deny" },
+    { "action": "shell", "resource": "git *push*--force*", "effect": "deny" },
+    { "action": "shell", "resource": "git *push* -f *", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf /", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf /*", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf ~", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf ~*", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf .", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf */.", "effect": "deny" },
+    { "action": "shell", "resource": "rm -fr /*", "effect": "deny" },
+    { "action": "shell", "resource": "rm -fr ~*", "effect": "deny" },
+    { "action": "shell", "resource": "rm -r -f /", "effect": "deny" },
+    { "action": "shell", "resource": "rm -r -f /*", "effect": "deny" },
+    { "action": "shell", "resource": "rm -r -f ~", "effect": "deny" },
+    { "action": "shell", "resource": "rm -r -f ~*", "effect": "deny" },
+    { "action": "shell", "resource": "rm -r -f */.", "effect": "deny" },
+    { "action": "shell", "resource": "*drop database*", "effect": "deny" },
+    { "action": "shell", "resource": "*drop schema*", "effect": "deny" },
+    { "action": "shell", "resource": "shutdown*", "effect": "deny" },
+    { "action": "shell", "resource": "restart-computer*", "effect": "deny" },
+    { "action": "shell", "resource": "stop-computer*", "effect": "deny" },
+    { "action": "shell", "resource": "format ?:*", "effect": "deny" },
+    { "action": "shell", "resource": "terraform destroy*", "effect": "deny" },
+    { "action": "shell", "resource": "kubectl delete*", "effect": "deny" },
+
+    // Shell secret reads (the read-tool rules above do not cover cat/grep).
+    { "action": "shell", "resource": "*.env", "effect": "deny" },
+    { "action": "shell", "resource": "*/.env", "effect": "deny" },
+    { "action": "shell", "resource": "*.env.*", "effect": "deny" },
+    { "action": "shell", "resource": "*.pem", "effect": "deny" },
+    { "action": "shell", "resource": "*.key", "effect": "deny" },
+    { "action": "shell", "resource": "*.p12", "effect": "deny" },
+    { "action": "shell", "resource": "*.pfx", "effect": "deny" },
+    { "action": "shell", "resource": "*cookie*.txt*", "effect": "deny" },
+    { "action": "shell", "resource": "*.git-credentials*", "effect": "deny" },
+    { "action": "shell", "resource": "*.npmrc*", "effect": "deny" },
+    { "action": "shell", "resource": "*/.aws/credentials*", "effect": "deny" },
+    { "action": "shell", "resource": "*/.ssh/id_*", "effect": "deny" },
+    { "action": "shell", "resource": "*id_rsa*", "effect": "deny" },
+    { "action": "shell", "resource": "*id_ed25519*", "effect": "deny" },
+    { "action": "shell", "resource": "*printenv*", "effect": "deny" },
+    { "action": "shell", "resource": "*get-childitem env:*", "effect": "deny" },
+
+    // The example file is public by design; it must stay readable. The pattern
+    // ends at the example filename so a command that also names a real secret
+    // cannot be allowed by this last-match-wins exception.
+    { "action": "shell", "resource": "*.env.example", "effect": "allow" }
+  ]
+}

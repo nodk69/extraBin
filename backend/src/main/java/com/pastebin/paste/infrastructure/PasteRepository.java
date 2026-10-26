@@ -58,6 +58,31 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
                                     @Param("windowStart") Instant windowStart,
                                     Pageable pageable);
 
+    /**
+     * Fast path for default public discovery feed when neither tag filtering nor keyword search
+     * is requested. Eliminates the outer join on tags and DISTINCT deduplication while preserving
+     * exact eligibility and deterministic ordering.
+     */
+    @Query(value = "SELECT p FROM Paste p WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND (:language IS NULL OR p.language = :language)" +
+           " AND p.createdAt >= COALESCE(:windowStart, p.createdAt)",
+           countQuery = "SELECT count(p) FROM Paste p WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND (:language IS NULL OR p.language = :language)" +
+           " AND p.createdAt >= COALESCE(:windowStart, p.createdAt)")
+    Page<Paste> findDefaultDiscoveryPastes(@Param("now") Instant now,
+                                           @Param("language") String language,
+                                           @Param("windowStart") Instant windowStart,
+                                           Pageable pageable);
+
+    /**
+     * Bounded batch post-filter query for search hits (e.g. Meilisearch candidate IDs).
+     * Authoritatively verifies eligibility against the single shared ELIGIBLE_PUBLIC_PREDICATE
+     * in a single query with zero N+1 queries.
+     */
+    @Query("SELECT p FROM Paste p WHERE p.publicId IN :publicIds AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE)
+    java.util.List<Paste> findEligiblePublicPastesByPublicIds(@Param("publicIds") java.util.Collection<String> publicIds,
+                                                             @Param("now") Instant now);
+
     @Query(value = "SELECT DISTINCT p FROM Paste p WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
            " AND p.starsCount > 0" +
            " AND (:language IS NULL OR p.language = :language)",
@@ -151,9 +176,16 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     @Query("SELECT p.id FROM Paste p WHERE p.expiresAt IS NOT NULL AND p.expiresAt <= :now")
     java.util.List<Long> findExpiredPasteIds(@Param("now") Instant now, Pageable pageable);
 
+    @Query("SELECT p.publicId FROM Paste p WHERE p.id IN :ids")
+    java.util.List<String> findPublicIdsByIds(@Param("ids") java.util.Collection<Long> ids);
+
     @Modifying
     @Query("DELETE FROM Paste p WHERE p.id IN :ids")
     int deletePastesByIds(@Param("ids") java.util.List<Long> ids);
+
+    @Modifying
+    @Query(value = "DELETE FROM pastes WHERE public_id = :publicId", nativeQuery = true)
+    int deleteByPublicIdNative(@Param("publicId") String publicId);
 
     @Modifying
     @Query("DELETE FROM Paste p WHERE p.expiresAt IS NOT NULL AND p.expiresAt <= :now")

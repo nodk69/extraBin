@@ -74,8 +74,9 @@ describe('UserDropdown', () => {
     expect(screen.getByText('dev@example.com')).toBeInTheDocument();
     expect(screen.getByText('DEV')).toBeInTheDocument();
     expect(screen.getByText('Account & Pastes')).toBeInTheDocument();
-    expect(screen.getByText('New Paste')).toBeInTheDocument();
-    expect(screen.getByText('Explore Discovery')).toBeInTheDocument();
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(screen.queryByText('New Paste')).not.toBeInTheDocument();
+    expect(screen.queryByText('Explore Discovery')).not.toBeInTheDocument();
 
     // Verify misleading shortcut label ⌘Q is NOT present
     expect(screen.queryByText('⌘Q')).not.toBeInTheDocument();
@@ -86,6 +87,27 @@ describe('UserDropdown', () => {
     // Click sign out
     fireEvent.click(signOutBtn);
     expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes dropdown when clicking anywhere outside', () => {
+    const onLogout = vi.fn();
+    render(
+      <BrowserRouter>
+        <div>
+          <button type="button" data-testid="outside-area">Outside Target</button>
+          <UserDropdown user={mockUser} onLogout={onLogout} />
+        </div>
+      </BrowserRouter>
+    );
+
+    const trigger = screen.getByRole('button', { name: /user account menu/i });
+    fireEvent.click(trigger);
+    expect(screen.getByText('Account & Pastes')).toBeInTheDocument();
+
+    // Click outside
+    const outside = screen.getByTestId('outside-area');
+    fireEvent.pointerDown(outside);
+    expect(screen.queryByText('Account & Pastes')).not.toBeInTheDocument();
   });
 
   it('closes and restores focus when Escape key is pressed', () => {

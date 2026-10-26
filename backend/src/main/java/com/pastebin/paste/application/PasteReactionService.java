@@ -39,6 +39,7 @@ public class PasteReactionService {
     private final ReplyVoteRepository replyVoteRepository;
     private final com.pastebin.paste.infrastructure.TagRepository tagRepository;
     private final com.pastebin.paste.infrastructure.PasteViewHistoryRepository pasteViewHistoryRepository;
+    private final com.pastebin.paste.infrastructure.PasteActivityEventRepository pasteActivityEventRepository;
     private final PasteService pasteService;
     private final RateLimiterService rateLimiterService;
 
@@ -61,7 +62,8 @@ public class PasteReactionService {
             PasteService pasteService,
             RateLimiterService rateLimiterService,
             com.pastebin.paste.infrastructure.TagRepository tagRepository,
-            com.pastebin.paste.infrastructure.PasteViewHistoryRepository pasteViewHistoryRepository
+            com.pastebin.paste.infrastructure.PasteViewHistoryRepository pasteViewHistoryRepository,
+            com.pastebin.paste.infrastructure.PasteActivityEventRepository pasteActivityEventRepository
     ) {
         this.pasteRepository = pasteRepository;
         this.pasteCommentRepository = pasteCommentRepository;
@@ -74,6 +76,7 @@ public class PasteReactionService {
         this.rateLimiterService = rateLimiterService;
         this.tagRepository = tagRepository;
         this.pasteViewHistoryRepository = pasteViewHistoryRepository;
+        this.pasteActivityEventRepository = pasteActivityEventRepository;
     }
 
     @PostConstruct
@@ -152,8 +155,20 @@ public class PasteReactionService {
             // Toggle
             if (targetType == VoteType.DOWN) {
                 pasteRepository.toggleUpToDown(lockedPaste.getId());
+                // Remove UPVOTE event from trending activity ledger
+                if (userId != null) {
+                    pasteActivityEventRepository.deleteUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                } else {
+                    pasteActivityEventRepository.deleteIpEvents(lockedPaste.getId(), ipHash, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                }
             } else {
                 pasteRepository.toggleDownToUp(lockedPaste.getId());
+                // Record UPVOTE event in trending activity ledger if eligible
+                if (lockedPaste.getVisibility() == com.pastebin.paste.domain.Visibility.PUBLIC
+                        && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null) {
+                    pasteActivityEventRepository.save(new com.pastebin.paste.domain.PasteActivityEvent(
+                            lockedPaste, com.pastebin.paste.domain.ActivityEventType.UPVOTE, userId, ipHash));
+                }
             }
             existing.setVoteType(targetType);
             pasteVoteRepository.save(existing);
@@ -163,6 +178,11 @@ public class PasteReactionService {
             pasteVoteRepository.save(newVote);
             if (targetType == VoteType.UP) {
                 pasteRepository.incrementUpvotes(lockedPaste.getId());
+                if (lockedPaste.getVisibility() == com.pastebin.paste.domain.Visibility.PUBLIC
+                        && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null) {
+                    pasteActivityEventRepository.save(new com.pastebin.paste.domain.PasteActivityEvent(
+                            lockedPaste, com.pastebin.paste.domain.ActivityEventType.UPVOTE, userId, ipHash));
+                }
             } else {
                 pasteRepository.incrementDownvotes(lockedPaste.getId());
             }
@@ -188,6 +208,11 @@ public class PasteReactionService {
             PasteVote existing = existingVoteOpt.get();
             if (existing.getVoteType() == VoteType.UP) {
                 pasteRepository.decrementUpvotes(lockedPaste.getId());
+                if (userId != null) {
+                    pasteActivityEventRepository.deleteUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                } else {
+                    pasteActivityEventRepository.deleteIpEvents(lockedPaste.getId(), ipHash, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                }
             } else {
                 pasteRepository.decrementDownvotes(lockedPaste.getId());
             }
@@ -216,6 +241,11 @@ public class PasteReactionService {
         if (!pasteStarRepository.existsByPasteIdAndUserId(lockedPaste.getId(), userId)) {
             pasteStarRepository.save(new PasteStar(lockedPaste, userId));
             pasteRepository.incrementStars(lockedPaste.getId());
+            if (lockedPaste.getVisibility() == com.pastebin.paste.domain.Visibility.PUBLIC
+                    && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null) {
+                pasteActivityEventRepository.save(new com.pastebin.paste.domain.PasteActivityEvent(
+                        lockedPaste, com.pastebin.paste.domain.ActivityEventType.STAR, userId, null));
+            }
         }
 
         Paste fresh = pasteRepository.findById(lockedPaste.getId()).orElse(lockedPaste);
@@ -235,6 +265,7 @@ public class PasteReactionService {
         if (starOpt.isPresent()) {
             pasteStarRepository.delete(starOpt.get());
             pasteRepository.decrementStars(lockedPaste.getId());
+            pasteActivityEventRepository.deleteUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.STAR);
         }
 
         Paste fresh = pasteRepository.findById(lockedPaste.getId()).orElse(lockedPaste);

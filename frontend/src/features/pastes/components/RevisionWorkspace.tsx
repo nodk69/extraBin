@@ -7,6 +7,7 @@ import {
   type VersionEntry,
   type LineDiffResult,
 } from '../utils/revisionDiff';
+import { NativeSelect } from '../../../components/ui/dropdown';
 
 export interface RevisionWorkspaceProps {
   paste: PasteView;
@@ -228,11 +229,11 @@ export const RevisionWorkspace: React.FC<RevisionWorkspaceProps> = ({
                 >
                   Select revision to inspect
                 </label>
-                <select
+                <NativeSelect
                   id="mobile-revision-selector"
                   value={targetVersionNum}
-                  onChange={(e) => {
-                    setTargetVersionNum(Number(e.target.value));
+                  onChange={(val) => {
+                    setTargetVersionNum(Number(val));
                     setCustomBaseVersionNum(null);
                   }}
                   className="w-full font-mono text-xs p-2 rounded-xl border border-[#17201d] bg-white text-[#17201d] shadow-[2px_2px_0_#17201d]"
@@ -242,7 +243,7 @@ export const RevisionWorkspace: React.FC<RevisionWorkspaceProps> = ({
                       Version {ver.version} {ver.isCurrent ? '(Current)' : ''}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               </div>
             ) : (
               <nav aria-label="Revision history" className="space-y-2">
@@ -304,11 +305,13 @@ export const RevisionWorkspace: React.FC<RevisionWorkspaceProps> = ({
                   >
                     Compare against base version:
                   </label>
-                  <select
+                  <NativeSelect
                     id="base-version-selector"
                     aria-label="Compare against base version"
                     value={effectiveBaseVersionNum.toString()}
-                    onChange={(e) => setCustomBaseVersionNum(Number(e.target.value))}
+                    onChange={(val) => setCustomBaseVersionNum(Number(val))}
+                    selectSize="sm"
+                    wrapperClassName="w-auto"
                     className="font-mono text-xs px-2 py-1 rounded-lg border border-[#17201d] bg-white text-[#17201d]"
                   >
                     {versions.map((ver) => (
@@ -316,7 +319,7 @@ export const RevisionWorkspace: React.FC<RevisionWorkspaceProps> = ({
                         Version {ver.version} {ver.isCurrent ? '(Current)' : ''}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </div>
 
                 <div data-testid="diff-target-label" className="font-mono text-xs font-semibold text-[#17201d]">

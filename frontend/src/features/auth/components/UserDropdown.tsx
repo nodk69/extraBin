@@ -133,7 +133,7 @@ export const UserDropdown: React.FC<UserDropdownProps> = ({ user, onLogout }) =>
   }, [user.role]);
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef}>
+    <div ref={dropdownRef} className="relative inline-block text-left">
       {/* Trigger Button */}
       <button
         ref={triggerRef}
@@ -216,28 +216,6 @@ export const UserDropdown: React.FC<UserDropdownProps> = ({ user, onLogout }) =>
                 <Icon name="settings" size={13} />
               </span>
               <span>Settings</span>
-            </Link>
-
-            <Link
-              to="/"
-              onClick={() => closeMenu(false)}
-              className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#17201d] hover:bg-[#ebe7dc] focus:bg-[#ebe7dc] focus:outline-none transition-colors no-underline group"
-            >
-              <span className="p-1 rounded bg-[#ebe7dc] text-[#17201d] group-hover:bg-[#17201d] group-hover:text-[#d1f04b] transition-colors">
-                <Icon name="plus" size={13} />
-              </span>
-              <span>New Paste</span>
-            </Link>
-
-            <Link
-              to="/discovery"
-              onClick={() => closeMenu(false)}
-              className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#17201d] hover:bg-[#ebe7dc] focus:bg-[#ebe7dc] focus:outline-none transition-colors no-underline group"
-            >
-              <span className="p-1 rounded bg-[#ebe7dc] text-[#17201d] group-hover:bg-[#17201d] group-hover:text-[#d1f04b] transition-colors">
-                <Icon name="spark" size={13} />
-              </span>
-              <span>Explore Discovery</span>
             </Link>
           </nav>
 

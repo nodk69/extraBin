@@ -94,6 +94,31 @@ public class DiscoveryController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/trending")
+    @Operation(summary = "Trending public pastes",
+            description = "Returns eligible public pastes ranked by engagement velocity and activity decay over a sliding time window (24h, 7d, 30d). "
+                    + "Protected against bot manipulation and rate limited per client IP.")
+    public ResponseEntity<PagedResponse<PasteSummaryResponse>> getTrending(
+            @RequestParam(name = "window", defaultValue = "24h") String window,
+            @RequestParam(name = "language", required = false) String language,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size,
+            HttpServletRequest request
+    ) {
+        if (window != null && !window.isBlank() && !Set.of("24h", "7d", "30d").contains(window.toLowerCase(Locale.ROOT))) {
+            throw new BadRequestException("Unknown time window for trending. Valid values: 24h, 7d, 30d.");
+        }
+
+        String clientIp = clientIpResolver.resolveClientIp(request);
+        rateLimiterService.checkRateLimit("discovery-trending:ip:" + clientIp, 60, 60);
+
+        int boundedPage = Math.max(0, page);
+        int boundedSize = Math.min(Math.max(1, size), 50);
+        PagedResponse<PasteSummaryResponse> response =
+                discoveryService.getTrending(window, language, boundedPage, boundedSize);
+        return ResponseEntity.ok(response);
+    }
+
     private void validateFilters(String q, String tag, String window, String sort) {
         if (q != null && q.length() > 200) {
             throw new BadRequestException("Search query must be at most 200 characters.");

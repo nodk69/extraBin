@@ -83,15 +83,16 @@ export function Select<T extends string = string>({
     const flip = below < 220 && above > below;
     const room = flip ? above : below;
 
-    // Generous default menu width so labels, hints, and descriptions are never cut
+    // Generous default menu width so labels, hints, and descriptions are never cut,
+    // but strictly clamped to window.innerWidth - 16 so it never bleeds offscreen on small devices.
     const defaultMin = 280;
     const computedMinMenuWidth = menuWidth > 0 ? menuWidth : defaultMin;
-    const maxViewportWidth = Math.max(220, window.innerWidth - 16);
+    const maxViewportWidth = Math.max(120, window.innerWidth - 16);
     const targetWidth = Math.min(Math.max(r.width, computedMinMenuWidth), maxViewportWidth);
 
     // If opening near the right edge of the viewport, anchor popover to trigger's right edge
     let idealLeft = r.left;
-    if (r.left + targetWidth > window.innerWidth - 12 && r.right - targetWidth >= 8) {
+    if (r.left + targetWidth > window.innerWidth - 8 && r.right - targetWidth >= 8) {
       idealLeft = r.right - targetWidth;
     }
     const clampLeft = Math.max(8, Math.min(idealLeft, window.innerWidth - targetWidth - 8));
@@ -249,9 +250,39 @@ export function Select<T extends string = string>({
   return (
     <div className={`pp-sel pp-sel--${variant} pp-sel--${size} ${className}`}>
       {name && <input type="hidden" name={name} value={value} />}
+      {(id || name) && (
+        <select
+          id={id}
+          name={name}
+          aria-label={ariaLabel}
+          tabIndex={-1}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value as T);
+          }}
+          style={{
+            position: 'absolute',
+            border: 0,
+            clip: 'rect(0 0 0 0)',
+            height: '1px',
+            margin: '-1px',
+            overflow: 'hidden',
+            padding: 0,
+            width: '1px',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+          }}
+        >
+          {options.map((opt) => (
+            <option key={String(opt.value)} value={String(opt.value)}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      )}
       <button
         ref={trigRef}
-        id={id}
+        id={id ? `${id}-trigger` : undefined}
         type="button"
         role="combobox"
         value={value}
@@ -259,7 +290,7 @@ export function Select<T extends string = string>({
         aria-expanded={open}
         aria-controls={`${uid}-list`}
         aria-activedescendant={searchable ? undefined : activeId}
-        aria-label={ariaLabel}
+        aria-label={id || name ? undefined : ariaLabel}
         disabled={disabled}
         data-open={open}
         className="pp-sel__trigger"
@@ -268,7 +299,14 @@ export function Select<T extends string = string>({
       >
         <span className={`pp-sel__value ${selected ? '' : 'is-placeholder'}`}>
           {selected?.icon && <span className="pp-sel__opt-icon">{selected.icon}</span>}
-          <span>{selected ? selected.label : placeholder}</span>
+          {selected ? (
+            <>
+              <span className="pp-sel__label-full">{selected.label}</span>
+              {selected.hint && <span className="pp-sel__label-short">{selected.hint}</span>}
+            </>
+          ) : (
+            <span>{placeholder}</span>
+          )}
         </span>
         {selected?.hint && <span className="pp-sel__hint">{selected.hint}</span>}
         <span className="pp-sel__chev" aria-hidden="true">

@@ -45,8 +45,8 @@ public class PasteSummaryMapper {
         }
         Map<Long, String> usernames = userIds.isEmpty()
                 ? Map.of()
-                : userRepository.findAllById(userIds).stream()
-                        .collect(Collectors.toMap(User::getId, User::getUsername, (a, b) -> a));
+                : userRepository.findUsernamesByIds(userIds).stream()
+                        .collect(Collectors.toMap(row -> (Long) row[0], row -> (String) row[1], (a, b) -> a));
         return map(pastes, usernames);
     }
 

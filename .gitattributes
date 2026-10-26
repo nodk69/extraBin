@@ -1,0 +1,7 @@
+# Keep generated OpenCode adapters LF-only so drift checks are identical on
+# Windows and Linux checkouts.
+.opencode/agents/*.md text eol=lf
+
+# Shell scripts and Node tooling are LF.
+*.sh text eol=lf
+scripts/engineering/*.mjs text eol=lf

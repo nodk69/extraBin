@@ -87,6 +87,8 @@ export interface DiscoveryCardProps {
   showSaveAction?: boolean;
   /** Set false to hide the author line (for example on an author's own profile). Defaults to true. */
   showAuthor?: boolean;
+  /** Active discovery tab when the snippet was clicked (for accurate back-navigation). */
+  fromTab?: 'explore' | 'trending' | 'most-saved';
 }
 
 /**
@@ -103,6 +105,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
   onSelectTag,
   showSaveAction = true,
   showAuthor = true,
+  fromTab,
 }) => {
   const titleId = useId();
   const safeId = normalizeSafeId(item);
@@ -125,12 +128,14 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
 
   const pastePath = canNavigate ? `/p/${encodeURIComponent(safeId)}` : null;
   const saveLabel = isSaved ? `Remove saved snippet ${title}` : `Save snippet ${title}`;
+  const navigationState = fromTab ? { fromTab } : undefined;
 
   return (
     <article className="discovery-card" aria-labelledby={titleId}>
       {pastePath && (
         <Link
           to={pastePath}
+          state={navigationState}
           className="discovery-card__overlay"
           tabIndex={-1}
           aria-hidden="true"
@@ -147,7 +152,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
 
         <h3 id={titleId} className="discovery-card__title">
           {pastePath ? (
-            <Link to={pastePath} className="discovery-card__title-link">
+            <Link to={pastePath} state={navigationState} className="discovery-card__title-link">
               {title}
             </Link>
           ) : (

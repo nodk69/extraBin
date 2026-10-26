@@ -3,6 +3,7 @@ import { AlertCircle, Code, Eye, EyeOff, Globe, Lock, KeyRound, Share2, Timer, S
 import { motion, AnimatePresence } from 'framer-motion';
 import { PixelButton } from '../../../components/ui/PixelButton';
 import { PixelInput } from '../../../components/ui/PixelInput';
+import { NativeSelect } from '../../../components/ui/dropdown';
 import { ToggleSwitch } from '../../../components/reactbits/ToggleSwitch';
 import { triggerSuccessBurst } from '../../../lib/confetti';
 import { pasteApi } from '../api/pasteApi';
@@ -28,6 +29,7 @@ export const LANGUAGES = [
   { value: 'markdown', label: 'Markdown' },
   { value: 'go', label: 'Go' },
   { value: 'rust', label: 'Rust' },
+  { value: 'c', label: 'C' },
   { value: 'cpp', label: 'C++' },
   { value: 'csharp', label: 'C#' },
   { value: 'php', label: 'PHP' },
@@ -463,10 +465,10 @@ export const CreatePasteForm: React.FC = () => {
               <Code className="w-3.5 h-3.5 text-[#00cc66]" />
               <span>&gt; SYNTAX_LANGUAGE</span>
             </label>
-            <select
+            <NativeSelect
               id="language-select"
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(val) => setLanguage(String(val))}
               className="w-full px-3.5 py-2.5 bg-black border-2 border-white text-white font-mono text-xs uppercase shadow-[3px_3px_0_0_#000] focus:border-[#00cc66] outline-none cursor-pointer"
             >
               {LANGUAGES.map((lang) => (
@@ -474,7 +476,7 @@ export const CreatePasteForm: React.FC = () => {
                   {lang.label.toUpperCase()}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* Visibility Selection */}
@@ -483,10 +485,10 @@ export const CreatePasteForm: React.FC = () => {
               <Eye className="w-3.5 h-3.5 text-[#00cc66]" />
               <span>&gt; VISIBILITY_POLICY</span>
             </label>
-            <select
+            <NativeSelect
               id="visibility-select"
               value={visibility}
-              onChange={(e) => setVisibility(e.target.value as Visibility)}
+              onChange={(val) => setVisibility(val as Visibility)}
               className="w-full px-3.5 py-2.5 bg-black border-2 border-white text-white font-mono text-xs uppercase shadow-[3px_3px_0_0_#000] focus:border-[#00cc66] outline-none cursor-pointer"
             >
               <option value="PUBLIC" className="bg-black text-white">PUBLIC (INDEXED IN DISCOVERY)</option>
@@ -494,7 +496,7 @@ export const CreatePasteForm: React.FC = () => {
               <option value="PRIVATE" disabled={!isAuthenticated} className="bg-black text-white">
                 PRIVATE {isAuthenticated ? '(RESTRICTED TO YOUR ACCOUNT)' : '(SIGN IN REQUIRED)'}
               </option>
-            </select>
+            </NativeSelect>
           </div>
 
           {/* Expiration Selection */}
@@ -503,12 +505,12 @@ export const CreatePasteForm: React.FC = () => {
               <Timer className="w-3.5 h-3.5 text-[#00cc66]" />
               <span>&gt; EXPIRATION_TTL</span>
             </label>
-            <select
+            <NativeSelect
               id="expiration-select"
               value={expiration === 'VIEW_ONCE' ? previousDuration : expiration}
               disabled={expiration === 'VIEW_ONCE'}
-              onChange={(e) => {
-                const newExp = e.target.value as ExpirationPolicy;
+              onChange={(val) => {
+                const newExp = val as ExpirationPolicy;
                 setExpiration(newExp);
                 if (newExp !== 'VIEW_ONCE') {
                   setPreviousDuration(newExp);
@@ -521,7 +523,7 @@ export const CreatePasteForm: React.FC = () => {
                   {opt.label.toUpperCase()}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
         </div>
 

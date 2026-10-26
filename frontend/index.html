@@ -17,30 +17,6 @@
     <script src="/config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Ko-fi Floating Chat Overlay Widget -->
-    <script src="https://storage.ko-fi.com/cdn/scripts/overlay-widget.js"></script>
-    <script>
-      function initKoFiWidget() {
-        if (typeof kofiWidgetOverlay !== 'undefined') {
-          try {
-            kofiWidgetOverlay.draw('nodk69', {
-              'type': 'floating-chat',
-              'floating-chat.donateButton.text': 'Support me',
-              'floating-chat.donateButton.background-color': '#794bc4',
-              'floating-chat.donateButton.text-color': '#fff'
-            });
-          } catch (e) {
-            console.warn('Ko-fi widget initialization error:', e);
-          }
-        } else {
-          setTimeout(initKoFiWidget, 150);
-        }
-      }
-      if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        initKoFiWidget();
-      } else {
-        window.addEventListener('DOMContentLoaded', initKoFiWidget);
-      }
-    </script>
+
   </body>
 </html>
