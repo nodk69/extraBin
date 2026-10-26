@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Build Application
 # -----------------------------------------------------------------------------
-FROM eclipse-temurin:17-jdk-jammy AS builder
+FROM eclipse-temurin:25-jdk-jammy AS builder
 WORKDIR /workspace
 
 # Copy Maven wrapper and pom for layer caching
@@ -17,7 +17,7 @@ RUN ./mvnw clean package -DskipTests -B
 # -----------------------------------------------------------------------------
 # Stage 2: Minimal Production Runtime
 # -----------------------------------------------------------------------------
-FROM eclipse-temurin:17-jre-jammy AS runtime
+FROM eclipse-temurin:25-jre-jammy AS runtime
 WORKDIR /app
 
 # Create unprivileged system user and group
