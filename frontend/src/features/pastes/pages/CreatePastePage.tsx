@@ -359,7 +359,6 @@ export const CreatePastePage: React.FC = () => {
   const [tags, setTags] = useState('');
   const [folder, setFolder] = useState('root');
   const [burnAfterReading, setBurnAfterReading] = useState(initialDefaults.defaultBurnAfterReading);
-  const [showBasicsGroup, setShowBasicsGroup] = useState(true);
   const [showSecurityGroup, setShowSecurityGroup] = useState(false);
   const [showOrganizeGroup, setShowOrganizeGroup] = useState(false);
 

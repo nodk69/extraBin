@@ -57,10 +57,10 @@ export const usePasteReactions = (initialIsStarred: boolean, initialStarsCount: 
 
     try {
       if (userVote === vote) {
-        await pasteApi.removeVote(pasteId);
+        await pasteApi.retractPasteVote(pasteId);
         setUserVote(null);
       } else {
-        await pasteApi.vote(pasteId, vote);
+        await pasteApi.votePaste(pasteId, vote);
         setUserVote(vote);
       }
     } catch (err: unknown) {

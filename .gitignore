@@ -82,22 +82,18 @@ backend/test_output.txt
 # Qoder specific
 .qoder-tmp/
 
-# Antigravity engineering system (committed despite the broad *.md / docs/* rules)
-!/AGENTS.md
-!/.agents/
-!/.agents/**
-!/scripts/engineering/
-!/scripts/engineering/**
-!/docs/engineering/
-!/docs/engineering/**
+# Agent & performance systems (ignored)
+.agents/
+.opencode/
+AGENTS.md
+opencode.jsonc
+docs/engineering/
+scripts/engineering/
+performance-tests/
+neon.ts
+package.json
+package-lock.json
 
-# OpenCode runtime adapters and project config (generated from .agents/agents/)
-!/.opencode/
-!/.opencode/**
-!/opencode.jsonc
-
-# Local Antigravity hook/verification state (never commit)
-.agents/state/
 .test-credentials.txt
 /target/
 /PasteBin/

@@ -171,7 +171,7 @@ export const DropdownTrigger = React.forwardRef<HTMLButtonElement, DropdownTrigg
     return (
       <button
         ref={(node) => {
-          triggerRef.current = node;
+          (triggerRef as React.MutableRefObject<HTMLButtonElement | null>).current = node;
           if (typeof forwardedRef === 'function') {
             forwardedRef(node);
           } else if (forwardedRef) {
@@ -220,7 +220,7 @@ export const DropdownMenuContent: React.FC<DropdownMenuContentProps> = ({
 
   return (
     <div
-      ref={menuRef}
+      ref={menuRef as React.RefObject<HTMLDivElement>}
       id={menuId}
       role="menu"
       style={{

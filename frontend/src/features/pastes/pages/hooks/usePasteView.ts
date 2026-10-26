@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { pasteApi } from '../../api/pasteApi';
 import { ApiError } from '../../../../lib/api-client/client';
 import type { PasteView } from '../../types/paste';
@@ -36,7 +36,7 @@ export interface UsePasteViewReturn {
   setShareToken: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
-export const usePasteView = (initialPaste: PasteView | null | undefined, initialId: string): UsePasteViewReturn => {
+export const usePasteView = (initialPaste: PasteView | null | undefined, _initialId: string): UsePasteViewReturn => {
   const [paste, setPaste] = useState<PasteView | null>(initialPaste || null);
   const [loading, setLoading] = useState(!initialPaste);
   const [error, setError] = useState<string | null>(null);

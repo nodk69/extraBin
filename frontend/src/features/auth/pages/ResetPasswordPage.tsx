@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Lock } from 'lucide-react';
 import { supabase } from '../../../lib/supabase/client';
 import { Button } from '../../../components/ui/Button';
 
 const ResetPasswordPage: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'ready' | 'updating' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -82,7 +81,7 @@ const ResetPasswordPage: React.FC = () => {
           </div>
         )}
 
-        {status === 'ready' && (
+        {(status === 'ready' || status === 'updating') && (
           <form onSubmit={handlePasswordUpdate} className="space-y-5 text-left">
             <div className="text-center">
               <div className="w-16 h-16 rounded-xl bg-[#c6f05b]/20 border-2 border-[#17201d] text-[#17201d] mx-auto flex items-center justify-center shadow-[3px_3px_0px_#17201d]">

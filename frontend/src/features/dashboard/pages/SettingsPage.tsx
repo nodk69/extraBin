@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon, IconName } from '../../../components/ui/PaperIcon';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
-import { Select, type SelectOption } from '../../../components/ui/dropdown';
+import { Select } from '../../../components/ui/dropdown';
 import { useAuth } from '../../auth/context/AuthContext';
 import { apiClient } from '../../../lib/api-client/client';
 import { accountApi } from '../api/accountApi';

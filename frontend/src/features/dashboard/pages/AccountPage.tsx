@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from '../../../components/ui/PaperIcon';
 import { Loading } from '../../../components/ui/Loading';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
-import { Select, type SelectOption } from '../../../components/ui/dropdown';
+import { Select } from '../../../components/ui/dropdown';
 import { useAuth } from '../../auth/context/AuthContext';
 import { accountApi, PasteSummary, PagedResponse, TagItem } from '../api/accountApi';
 import { EditPasteModal } from '../../pastes/components/EditPasteModal';
