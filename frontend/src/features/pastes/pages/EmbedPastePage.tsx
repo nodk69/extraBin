@@ -4,7 +4,8 @@ import { pasteApi } from '../api/pasteApi';
 import { EmbedPasteView, PasteFileItem } from '../types/paste';
 import { renderSafeSyntaxHighlight } from '../../../lib/syntax/highlighter';
 import { Icon } from '../../../components/ui/PaperIcon';
-import { Loading } from '../../../components/ui/Loading';
+import { TechnologyIcon } from '../../../components/ui/TechnologyIcon';
+import { EmbedSkeleton } from '../../../components/ui/SkeletonLayouts';
 
 export const EmbedPastePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -61,16 +62,12 @@ export const EmbedPastePage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#faf8f2] flex items-center justify-center">
-        <Loading message="Loading embed snippet..." />
-      </div>
-    );
+    return <EmbedSkeleton />;
   }
 
   if (error || !paste || !activeFile) {
     return (
-      <div className="min-h-screen bg-[#faf8f2] flex flex-col items-center justify-center p-6 text-center font-mono">
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#faf8f2] p-6 text-center font-mono">
         <div className="max-w-md p-6 bg-white border-2 border-[#17201d] rounded-2xl shadow-[4px_4px_0px_#17201d] space-y-3">
           <div className="w-10 h-10 mx-auto rounded-xl bg-[#fee2e2] text-[#dc2626] border border-[#fca5a5] flex items-center justify-center">
             <Icon name="lock" size={20} />
@@ -96,7 +93,7 @@ export const EmbedPastePage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#faf8f2] text-[#17201d] flex flex-col font-sans select-text">
+    <div className="flex min-h-[100dvh] flex-col bg-[#faf8f2] font-sans text-[#17201d] select-text">
       {/* Top Header Bar */}
       <header className="px-3 py-2 bg-[#faf8f2] border-b-2 border-[#17201d] flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -115,7 +112,8 @@ export const EmbedPastePage: React.FC = () => {
           <h1 className="text-xs font-bold text-[#17201d] truncate m-0 font-mono" title={paste.title || 'Untitled'}>
             {paste.title || 'Untitled Paste'}
           </h1>
-          <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-[#ebe7dc] text-[#555] border border-[#d5d0c5] shrink-0 uppercase">
+          <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-[#ebe7dc] text-[#555] border border-[#d5d0c5] shrink-0 uppercase inline-flex items-center gap-1">
+            <TechnologyIcon filename={activeFile.filename} language={activeFile.language || paste.language} content={activeFile.content} size={11} />
             {activeFile.language || paste.language}
           </span>
         </div>
@@ -163,7 +161,10 @@ export const EmbedPastePage: React.FC = () => {
                   : 'bg-transparent text-[#74786f] border-transparent hover:text-[#17201d]'
               }`}
             >
-              {file.filename}
+              <span className="inline-flex items-center gap-1.5">
+                <TechnologyIcon filename={file.filename} language={file.language || paste.language} content={file.content} size={13} />
+                {file.filename}
+              </span>
             </button>
           ))}
         </div>

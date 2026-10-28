@@ -18,7 +18,7 @@ import { useAuth } from '../../auth/context/AuthContext';
 import { pasteApi } from '../api/pasteApi';
 import { CommentItem, PasteView } from '../types/paste';
 import { ApiError } from '../../../lib/api-client/client';
-import { Loading } from '../../../components/ui/Loading';
+import { DiscussionSkeleton } from '../../../components/ui/SkeletonLayouts';
 
 interface PasteCommentsSectionProps {
   paste: PasteView;
@@ -318,9 +318,7 @@ export const PasteCommentsSection: React.FC<PasteCommentsSectionProps> = ({ past
       {/* Comments List */}
       <div className="space-y-3">
         {loading ? (
-          <div className="p-8 flex justify-center">
-            <Loading variant="inline" icon="loader" message="Loading discussion..." announce={false} />
-          </div>
+          <DiscussionSkeleton />
         ) : error ? (
           <div className="p-4 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs font-mono">
             {error}

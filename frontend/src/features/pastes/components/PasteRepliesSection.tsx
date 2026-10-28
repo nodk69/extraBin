@@ -15,7 +15,7 @@ import { ReplyItem as ReplyItemType } from '../types/reply';
 import { PasteView } from '../types/paste';
 import { ReplyItem } from './ReplyItem';
 import { ApiError } from '../../../lib/api-client/client';
-import { Loading } from '../../../components/ui/Loading';
+import { DiscussionSkeleton } from '../../../components/ui/SkeletonLayouts';
 
 interface PasteRepliesSectionProps {
   paste: PasteView;
@@ -584,9 +584,7 @@ export const PasteRepliesSection: React.FC<PasteRepliesSectionProps> = ({ paste 
 
       {/* Replies List */}
       {loading ? (
-        <div className="py-12 flex justify-center">
-          <Loading variant="inline" message="Loading discussion..." announce={false} />
-        </div>
+        <DiscussionSkeleton />
       ) : replies.length === 0 ? (
         /* Empty State */
         <div className="border border-dashed border-[#cfcac0] rounded-xl p-8 text-center bg-[#faf8f2]">

@@ -36,6 +36,7 @@ public class AccountPasteController {
     public ResponseEntity<PagedResponse<PasteSummaryResponse>> listMyPastes(
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "visibility", required = false) String visibility,
             @RequestParam(name = "folderId", required = false) Long folderId,
             @RequestParam(name = "unfiled", required = false) Boolean unfiled,
             @RequestParam(name = "search", required = false) String search,
@@ -60,12 +61,21 @@ public class AccountPasteController {
                     "Invalid sort direction. Allowed values: asc, desc.");
         }
 
+        com.pastebin.paste.domain.Visibility visibilityEnum = null;
+        if (visibility != null && !visibility.isBlank() && !"ALL".equalsIgnoreCase(visibility.trim())) {
+            try {
+                visibilityEnum = com.pastebin.paste.domain.Visibility.valueOf(visibility.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException ex) {
+                throw new com.pastebin.shared.errors.BadRequestException("Invalid visibility value: " + visibility);
+            }
+        }
+
         int boundedSize = Math.min(Math.max(1, size), 50);
 
         Sort librarySort = Sort.by(dir, sort).and(Sort.by(Sort.Order.desc("id")));
         PageRequest pageRequest = PageRequest.of(Math.max(0, page), boundedSize, librarySort);
         PagedResponse<PasteSummaryResponse> response = pasteManagementService.searchUserPastes(
-                principal.getId(), folderId, unfiled, search, tag, pageRequest);
+                principal.getId(), visibilityEnum, folderId, unfiled, search, tag, pageRequest);
         return ResponseEntity.ok(response);
     }
 
@@ -98,5 +108,16 @@ public class AccountPasteController {
     ) {
         List<PasteRevisionResponse> revisions = pasteManagementService.getPasteRevisions(id, principal.getId());
         return ResponseEntity.ok(revisions);
+    }
+
+    @PostMapping("/{id}/revisions/{version}/restore")
+    @Operation(summary = "Restore paste revision", description = "Restores full paste workspace to the specified historical revision snapshot.")
+    public ResponseEntity<PasteViewResponse> restoreRevision(
+            @PathVariable("id") String id,
+            @PathVariable("version") Long version,
+            @AuthenticationPrincipal PastebinUserPrincipal principal
+    ) {
+        PasteViewResponse response = pasteManagementService.restoreRevision(id, version, principal.getId());
+        return ResponseEntity.ok(response);
     }
 }

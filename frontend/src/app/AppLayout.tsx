@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from '../features/auth/context/AuthContext';
 import { Icon, IconName } from '../components/ui/PaperIcon';
 import { UserDropdown } from '../features/auth/components/UserDropdown';
 import { DropdownMenu, DropdownTrigger, DropdownMenuContent } from '../components/ui/dropdown';
-import { Loading } from '../components/ui/Loading';
+import { RouteSkeleton } from '../components/ui/SkeletonLayouts';
 
 const AppLayoutContent: React.FC = () => {
   const location = useLocation();
@@ -38,7 +38,7 @@ const AppLayoutContent: React.FC = () => {
       <main className="main-content">
         <header className="topbar">
           <div className="topbar-left">
-            <Link to="/" className="flex items-center gap-2.5 text-inherit no-underline group">
+            <Link to="/" className="flex min-w-0 items-center gap-2.5 text-inherit no-underline group">
               <div className="brand-mark" aria-hidden="true">
                 <span>E</span>
               </div>
@@ -79,9 +79,11 @@ const AppLayoutContent: React.FC = () => {
             })}
           </nav>
 
-          <div className="topbar-right flex items-center gap-2.5">
+          <div className="topbar-right flex min-w-0 items-center gap-2.5">
             {user ? (
-              <UserDropdown user={user} onLogout={logout} />
+              <>
+                <UserDropdown user={user} onLogout={logout} />
+              </>
             ) : (
               <>
                 {/* Desktop Auth Links */}
@@ -161,13 +163,11 @@ const AppLayoutContent: React.FC = () => {
           </div>
         </header>
 
-        <Suspense
-          fallback={<Loading message="Loading workbench..." className="min-h-[calc(100vh-140px)]" />}
-        >
+        <Suspense fallback={<RouteSkeleton />}>
           <Outlet />
         </Suspense>
 
-        <footer className="w-full border-t border-[#d8d4ca] bg-[#ebe7dc]/50 py-8 mt-16 pb-24 md:pb-8">
+        <footer className="site-footer w-full border-t border-[#d8d4ca] bg-[#ebe7dc]/50 py-8 mt-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-[#74776f]">
             <div className="flex items-center gap-2">
               <span className="font-bold text-[#17201d]">extraBin.</span>
@@ -199,6 +199,7 @@ const AppLayoutContent: React.FC = () => {
             <span>Explore</span>
           </Link>
           {user ? (
+            <>
             <Link
               to="/account"
               className={`mobile-nav-item ${location.pathname.startsWith('/account') ? 'active' : ''}`}
@@ -206,6 +207,7 @@ const AppLayoutContent: React.FC = () => {
               <Icon name="user" size={18} />
               <span>Account</span>
             </Link>
+            </>
           ) : (
             <Link
               to="/login"

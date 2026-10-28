@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../../components/ui/PaperIcon';
-import { Loading } from '../../../components/ui/Loading';
+import { DiscoveryPageSkeleton } from '../../../components/ui/SkeletonLayouts';
 import { Select } from '../../../components/ui/dropdown';
-import { discoveryApi, DiscoveryFilters, PublicTag } from '../api/discoveryApi';
+import { discoveryApi, DiscoveryFilters, PublicTag, DISCOVERY_PAGE_SIZE } from '../api/discoveryApi';
 import { pasteApi } from '../../pastes/api/pasteApi';
 import { useAuth } from '../../auth/context/AuthContext';
 import { accountApi, PagedResponse, PasteSummary } from '../../dashboard/api/accountApi';
+import { authorProfileApi, FOLLOWING_CHANGED_EVENT } from '../../authors/api/authorProfileApi';
 import { DiscoveryCard } from '../components/DiscoveryCard';
+import { useDiscoveryFeed, FeedResult } from './useDiscoveryFeed';
 import '../discovery.css';
 
 const LANGUAGE_OPTIONS = [
@@ -26,10 +28,15 @@ const LANGUAGE_OPTIONS = [
   { value: 'css', label: 'CSS' },
 ];
 
-const isAbortError = (err: unknown): boolean => {
-  const errorObj = err as { name?: string };
-  return errorObj?.name === 'CanceledError' || errorObj?.name === 'AbortError';
-};
+type DiscoveryTab = 'explore' | 'trending' | 'most-saved' | 'following';
+const readTab = (value: string | null): DiscoveryTab =>
+  value === 'trending' || value === 'most-saved' || value === 'following' ? value : 'explore';
+const pageResult = (result: PagedResponse<PasteSummary>): FeedResult => ({
+  items: result.items,
+  next: result.page + 1,
+  hasMore: !(result.isLast ?? (result.page + 1 >= result.totalPages)),
+  totalElements: result.totalElements,
+});
 
 const toId = (item?: PasteSummary | null): string => {
   if (item?.id === null || item?.id === undefined) return '';
@@ -41,111 +48,75 @@ const pluralizeCount = (count: number): string =>
   `${count} ${count === 1 ? 'public paste' : 'public pastes'}`;
 
 export const DiscoveryPage: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const initialTabParam = searchParams.get('tab');
-  const initialTab: 'explore' | 'trending' | 'most-saved' =
-    initialTabParam === 'trending' || initialTabParam === 'most-saved'
-      ? initialTabParam
-      : 'explore';
-
-  const [tab, setTab] = useState<'explore' | 'trending' | 'most-saved'>(initialTab);
-
-  // Sync tab state when searchParams changes (e.g. browser back/forward)
-  useEffect(() => {
-    const currentParam = searchParams.get('tab');
-    const targetTab: 'explore' | 'trending' | 'most-saved' =
-      currentParam === 'trending' || currentParam === 'most-saved'
-        ? currentParam
-        : 'explore';
-    if (targetTab !== tab) {
-      setTab(targetTab);
-    }
-  }, [searchParams]);
-  const [data, setData] = useState<PagedResponse<PasteSummary> | null>(null);
-  const [trendingData, setTrendingData] = useState<PagedResponse<PasteSummary> | null>(null);
-  const [mostSavedData, setMostSavedData] = useState<PagedResponse<PasteSummary> | null>(null);
+  const tab = readTab(searchParams.get('tab'));
   const [tags, setTags] = useState<PublicTag[]>([]);
   const [tagsFailed, setTagsFailed] = useState(false);
 
-  const [selectedLanguage, setSelectedLanguage] = useState('all');
+  const [languages, setLanguages] = useState({ explore: 'all', trending: 'all', 'most-saved': 'all' });
+  const selectedLanguage = tab === 'following' ? 'all' : languages[tab];
+  const setSelectedLanguage = (value: string) => {
+    if (tab !== 'following') setLanguages((current) => ({ ...current, [tab]: value }));
+  };
   const [searchInput, setSearchInput] = useState('');
   const [committedQ, setCommittedQ] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [windowFilter, setWindowFilter] = useState<'24h' | '7d' | '30d' | 'all'>('all');
   const [trendingWindow, setTrendingWindow] = useState<'24h' | '7d' | '30d'>('24h');
   const [sortFilter, setSortFilter] = useState<'newest' | 'oldest' | 'updated'>('newest');
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
-  const [page, setPage] = useState(0);
-  const [exploreTick, setExploreTick] = useState(0);
-  const [trendingPage, setTrendingPage] = useState(0);
-  const [trendingTick, setTrendingTick] = useState(0);
-  const [mostSavedPage, setMostSavedPage] = useState(0);
-  const [mostSavedTick, setMostSavedTick] = useState(0);
-
-  const [isFetching, setIsFetching] = useState(false);
-  const [exploreError, setExploreError] = useState<string | null>(null);
-  const [trendingLoading, setTrendingLoading] = useState(false);
-  const [trendingError, setTrendingError] = useState<string | null>(null);
-  const [mostSavedLoading, setMostSavedLoading] = useState(false);
-  const [mostSavedError, setMostSavedError] = useState<string | null>(null);
 
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
-  const exploreReqIdRef = useRef(0);
-  const trendingReqIdRef = useRef(0);
-  const mostSavedReqIdRef = useRef(0);
-  const exploreAbortRef = useRef<AbortController | null>(null);
-  const trendingAbortRef = useRef<AbortController | null>(null);
-  const mostSavedAbortRef = useRef<AbortController | null>(null);
   const savingRef = useRef<Set<string>>(new Set());
-
-  // Explore feed: server-side search/filter/sort; every filter change refetches from page 0.
+  const filters: DiscoveryFilters = {
+    q: committedQ || undefined,
+    tag: tagFilter || undefined,
+    language: languages.explore === 'all' ? undefined : languages.explore,
+    window: windowFilter === 'all' ? undefined : windowFilter,
+    sort: sortFilter === 'newest' ? undefined : sortFilter,
+  };
+  const explore = useDiscoveryFeed(JSON.stringify(filters), tab === 'explore', async (position, signal) =>
+    pageResult(await discoveryApi.getDiscovery(typeof position === 'number' ? position : 0, DISCOVERY_PAGE_SIZE, filters, signal))
+  );
+  const trending = useDiscoveryFeed(JSON.stringify([trendingWindow, languages.trending]), tab === 'trending', async (position, signal) =>
+    pageResult(await discoveryApi.getTrending(typeof position === 'number' ? position : 0, DISCOVERY_PAGE_SIZE, trendingWindow,
+      languages.trending === 'all' ? undefined : languages.trending, signal))
+  );
+  const mostSaved = useDiscoveryFeed(languages['most-saved'], tab === 'most-saved', async (position, signal) =>
+    pageResult(await discoveryApi.getMostSaved(typeof position === 'number' ? position : 0, DISCOVERY_PAGE_SIZE,
+      languages['most-saved'] === 'all' ? undefined : languages['most-saved'], signal))
+  );
+  const identity = isAuthenticated ? String(user?.id ?? user?.username ?? 'authenticated') : 'guest';
+  const following = useDiscoveryFeed(identity, tab === 'following' && isAuthenticated && !authLoading, async (position, signal) => {
+    const result = await authorProfileApi.getFollowingFeedCursor(typeof position === 'string' ? position : undefined, DISCOVERY_PAGE_SIZE, signal);
+    return { items: result.items, next: result.nextCursor, hasMore: result.hasMore };
+  });
+  const followingReset = useRef(following.reset);
+  followingReset.current = following.reset;
   useEffect(() => {
-    if (tab !== 'explore') return;
-    if (exploreAbortRef.current) {
-      exploreAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    exploreAbortRef.current = controller;
-    const id = ++exploreReqIdRef.current;
-
-    setIsFetching(true);
-    setExploreError(null);
-
-    const filters: DiscoveryFilters = {
-      q: committedQ || undefined,
-      tag: tagFilter || undefined,
-      language: selectedLanguage === 'all' ? undefined : selectedLanguage,
-      window: windowFilter === 'all' ? undefined : windowFilter,
-      sort: sortFilter === 'newest' ? undefined : sortFilter,
+    if (!isAuthenticated) return;
+    const revalidate = () => followingReset.current();
+    window.addEventListener(FOLLOWING_CHANGED_EVENT, revalidate);
+    window.addEventListener('focus', revalidate);
+    return () => {
+      window.removeEventListener(FOLLOWING_CHANGED_EVENT, revalidate);
+      window.removeEventListener('focus', revalidate);
     };
-
-    discoveryApi
-      .getDiscovery(page, 18, filters, controller.signal)
-      .then((res) => {
-        if (id !== exploreReqIdRef.current) return;
-        setData(res);
-        setIsFetching(false);
-      })
-      .catch((err: unknown) => {
-        if (isAbortError(err) || id !== exploreReqIdRef.current) return;
-        setExploreError('Unable to load public pastes. Please check your network connection.');
-        setIsFetching(false);
-      });
-
-    return () => controller.abort();
-  }, [tab, page, committedQ, tagFilter, selectedLanguage, windowFilter, sortFilter, exploreTick]);
+  }, [identity, isAuthenticated]);
 
   // Public tag cloud for the discovery filter bar. A failure never fabricates tags.
   useEffect(() => {
     let cancelled = false;
-    discoveryApi
-      .getPublicTags()
-      .then((res) => {
+    const controller = new AbortController();
+    Promise.resolve().then(() => {
+      if (cancelled) return [];
+      return discoveryApi.getPublicTags(controller.signal);
+    }).then((res) => {
         if (cancelled) return;
         setTags(res || []);
         setTagsFailed(false);
@@ -157,72 +128,9 @@ export const DiscoveryPage: React.FC = () => {
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, []);
-
-  // Trending tab: genuine engagement velocity over sliding windows (24h, 7d, 30d).
-  useEffect(() => {
-    if (tab !== 'trending') return;
-    if (trendingAbortRef.current) {
-      trendingAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    trendingAbortRef.current = controller;
-    const id = ++trendingReqIdRef.current;
-
-    setTrendingLoading(true);
-    setTrendingError(null);
-
-    discoveryApi
-      .getTrending(
-        trendingPage,
-        18,
-        trendingWindow,
-        selectedLanguage === 'all' ? undefined : selectedLanguage,
-        controller.signal
-      )
-      .then((res) => {
-        if (id !== trendingReqIdRef.current) return;
-        setTrendingData(res);
-        setTrendingLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (isAbortError(err) || id !== trendingReqIdRef.current) return;
-        setTrendingError('Could not load trending snippets.');
-        setTrendingLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [tab, trendingPage, trendingWindow, selectedLanguage, trendingTick]);
-
-  // Most-saved tab: dedicated endpoint, never fabricates popularity from other signals.
-  useEffect(() => {
-    if (tab !== 'most-saved') return;
-    if (mostSavedAbortRef.current) {
-      mostSavedAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    mostSavedAbortRef.current = controller;
-    const id = ++mostSavedReqIdRef.current;
-
-    setMostSavedLoading(true);
-    setMostSavedError(null);
-
-    discoveryApi
-      .getMostSaved(mostSavedPage, 18, selectedLanguage === 'all' ? undefined : selectedLanguage, controller.signal)
-      .then((res) => {
-        if (id !== mostSavedReqIdRef.current) return;
-        setMostSavedData(res);
-        setMostSavedLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (isAbortError(err) || id !== mostSavedReqIdRef.current) return;
-        setMostSavedError('Could not load most-saved snippets.');
-        setMostSavedLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [tab, mostSavedPage, selectedLanguage, mostSavedTick]);
 
   // Seed the saved state for authenticated viewers from the real starred endpoint.
   useEffect(() => {
@@ -231,7 +139,8 @@ export const DiscoveryPage: React.FC = () => {
       return;
     }
     let cancelled = false;
-    Promise.resolve(accountApi.getStarredPastes())
+    setStarredIds(new Set());
+    Promise.resolve().then(() => cancelled ? [] : accountApi.getStarredPastes())
       .then((items) => {
         if (cancelled) return;
         const ids = (items || [])
@@ -245,33 +154,15 @@ export const DiscoveryPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, identity]);
 
-  useEffect(() => {
-    return () => {
-      if (exploreAbortRef.current) exploreAbortRef.current.abort();
-      if (trendingAbortRef.current) trendingAbortRef.current.abort();
-      if (mostSavedAbortRef.current) mostSavedAbortRef.current.abort();
-    };
-  }, []);
-
-  const applyFilterChange = (apply: () => void) => {
-    setPage(0);
-    apply();
-  };
+  const applyFilterChange = (apply: () => void) => apply();
 
   // Debounce search input (350ms) to provide smooth typo-tolerant search-as-you-type
   useEffect(() => {
     const timer = setTimeout(() => {
       const trimmed = searchInput.trim();
-      setCommittedQ((prev) => {
-        const next = trimmed.length > 0 ? trimmed : null;
-        if (prev !== next) {
-          setPage(0);
-          return next;
-        }
-        return prev;
-      });
+      setCommittedQ(trimmed.length > 0 ? trimmed : null);
     }, 350);
 
     return () => clearTimeout(timer);
@@ -283,7 +174,6 @@ export const DiscoveryPage: React.FC = () => {
   };
 
   const handleClearFilters = () => {
-    setPage(0);
     setSearchInput('');
     setCommittedQ(null);
     setTagFilter(null);
@@ -296,19 +186,7 @@ export const DiscoveryPage: React.FC = () => {
     applyFilterChange(() => setTagFilter((prev) => (prev === name ? null : name)));
   };
 
-  const handleLanguageChange = (value: string) => {
-    if (tab === 'trending') {
-      setTrendingPage(0);
-      setSelectedLanguage(value);
-      return;
-    }
-    if (tab === 'most-saved') {
-      setMostSavedPage(0);
-      setSelectedLanguage(value);
-      return;
-    }
-    applyFilterChange(() => setSelectedLanguage(value));
-  };
+  const handleLanguageChange = (value: string) => setSelectedLanguage(value);
 
   const handleToggleSave = async (id: string, wasSaved: boolean) => {
     if (!isAuthenticated) return;
@@ -329,13 +207,10 @@ export const DiscoveryPage: React.FC = () => {
         setStarredIds((prev) => new Set(prev).add(id));
       }
       // Counts are only ever read back from the server, never adjusted locally.
-      if (tab === 'trending') {
-        setTrendingTick((t) => t + 1);
-      } else if (tab === 'most-saved') {
-        setMostSavedTick((t) => t + 1);
-      } else {
-        setExploreTick((t) => t + 1);
-      }
+      explore.refresh();
+      trending.refresh();
+      mostSaved.refresh();
+      following.refresh();
     } catch {
       setSaveFeedback("Couldn't save this snippet. Please try again.");
     } finally {
@@ -348,9 +223,8 @@ export const DiscoveryPage: React.FC = () => {
     }
   };
 
-  const handleSwitchTab = (next: 'explore' | 'trending' | 'most-saved') => {
+  const handleSwitchTab = (next: DiscoveryTab) => {
     if (next === tab) return;
-    setTab(next);
     setSearchParams((prev) => {
       const nextParams = new URLSearchParams(prev);
       if (next === 'explore') {
@@ -360,84 +234,24 @@ export const DiscoveryPage: React.FC = () => {
       }
       return nextParams;
     }, { replace: true });
-
-    if (next === 'trending') {
-      setTrendingPage(0);
-      setTrendingTick((t) => t + 1);
-    } else if (next === 'most-saved') {
-      setMostSavedPage(0);
-      setMostSavedTick((t) => t + 1);
-    } else {
-      setPage(0);
-    }
   };
 
-  const items = tab === 'explore'
-    ? (data?.items || [])
-    : tab === 'trending'
-      ? (trendingData?.items || [])
-      : (mostSavedData?.items || []);
-
-  const currentPage = tab === 'explore'
-    ? (data?.page ?? page)
-    : tab === 'trending'
-      ? (trendingData?.page ?? trendingPage)
-      : (mostSavedData?.page ?? mostSavedPage);
-
-  const totalPages = tab === 'explore'
-    ? (data?.totalPages ?? 0)
-    : tab === 'trending'
-      ? (trendingData?.totalPages ?? 0)
-      : (mostSavedData?.totalPages ?? 0);
-
-  const totalElements = tab === 'explore'
-    ? (data?.totalElements ?? 0)
-    : tab === 'trending'
-      ? (trendingData?.totalElements ?? 0)
-      : (mostSavedData?.totalElements ?? 0);
-
-  const isFirstPage = Boolean(
-    tab === 'explore'
-      ? (data ? (data.isFirst ?? currentPage <= 0) : true)
-      : tab === 'trending'
-        ? (trendingData ? (trendingData.isFirst ?? currentPage <= 0) : true)
-        : (mostSavedData ? (mostSavedData.isFirst ?? currentPage <= 0) : true)
-  );
-
-  const isLastPage = Boolean(
-    tab === 'explore'
-      ? (data ? (data.isLast ?? (totalPages === 0 || currentPage >= totalPages - 1)) : true)
-      : tab === 'trending'
-        ? (trendingData ? (trendingData.isLast ?? (totalPages === 0 || currentPage >= totalPages - 1)) : true)
-        : (mostSavedData ? (mostSavedData.isLast ?? (totalPages === 0 || currentPage >= totalPages - 1)) : true)
-  );
-
-  const activeTabError = tab === 'explore'
-    ? exploreError
-    : tab === 'trending'
-      ? trendingError
-      : mostSavedError;
-
-  const activeTabLoading = tab === 'explore'
-    ? data === null
-    : tab === 'trending'
-      ? trendingData === null
-      : mostSavedData === null;
+  const activeFeed = tab === 'explore' ? explore : tab === 'trending' ? trending : tab === 'most-saved' ? mostSaved : following;
+  const items = activeFeed.items;
+  const activeTabLoading = !activeFeed.loaded;
+  const titles = { explore: 'Latest public pastes', trending: 'Trending pastes', 'most-saved': 'Most saved', following: 'Following Feed' };
+  const errors = {
+    explore: 'Failed to connect to registry', trending: 'Could not load trending snippets',
+    'most-saved': 'Could not load most-saved snippets', following: 'Could not load your Following feed',
+  };
+  const emptyTitles = {
+    explore: 'No public pastes found', trending: 'No trending snippets yet',
+    'most-saved': 'No saved snippets yet', following: 'Your Following feed is quiet',
+  };
 
   const hasActiveFilters = Boolean(
     committedQ || tagFilter || windowFilter !== 'all' || sortFilter !== 'newest' || selectedLanguage !== 'all'
   );
-
-  const goPrev = () => {
-    if (tab === 'explore') setPage(Math.max(0, currentPage - 1));
-    else if (tab === 'trending') setTrendingPage(Math.max(0, currentPage - 1));
-    else setMostSavedPage(Math.max(0, currentPage - 1));
-  };
-  const goNext = () => {
-    if (tab === 'explore') setPage(Math.min(Math.max(totalPages - 1, 0), currentPage + 1));
-    else if (tab === 'trending') setTrendingPage(Math.min(Math.max(totalPages - 1, 0), currentPage + 1));
-    else setMostSavedPage(Math.min(Math.max(totalPages - 1, 0), currentPage + 1));
-  };
 
   const renderGrid = (refreshing: boolean) => (
     <div className={`discovery-grid${refreshing ? ' is-refreshing' : ''}`}>
@@ -451,7 +265,7 @@ export const DiscoveryPage: React.FC = () => {
             isSaved={id.length > 0 && starredIds.has(id)}
             isSaving={id.length > 0 && savingIds.has(id)}
             onToggleSave={handleToggleSave}
-            onSelectTag={handleTagToggle}
+            onSelectTag={tab === 'explore' ? handleTagToggle : undefined}
             fromTab={tab}
           />
         );
@@ -462,7 +276,7 @@ export const DiscoveryPage: React.FC = () => {
   return (
     <div className="workspace discovery-page">
       <header className="discovery-header">
-        <div>
+        <div className="discovery-header__text">
           <span className="discovery-eyebrow">COMMUNITY / DISCOVER</span>
           <h1 className="discovery-title">Explore public pastes</h1>
           <p className="discovery-subtitle">
@@ -496,11 +310,20 @@ export const DiscoveryPage: React.FC = () => {
             >
               Most saved
             </button>
+            <button
+              type="button"
+              className={`discovery-view-tab${tab === 'following' ? ' is-active' : ''}`}
+              aria-pressed={tab === 'following'}
+              onClick={() => handleSwitchTab('following')}
+            >
+              Following Feed
+            </button>
           </nav>
         </div>
       </header>
 
-      <section className="discovery-panel" aria-label="Search and filter public pastes">
+      {tab !== 'following' && (
+        <section className="discovery-panel" aria-label="Search and filter public pastes">
         {tab === 'explore' && (
           <form className="discovery-search" role="search" onSubmit={handleSearchSubmit}>
             <div className="discovery-search__field">
@@ -518,14 +341,85 @@ export const DiscoveryPage: React.FC = () => {
                 placeholder="Search public snippets…"
                 onChange={(event) => setSearchInput(event.target.value)}
               />
+              {/* Embedded search button inside right side of search field */}
+              <button
+                type="submit"
+                className="discovery-search__submit-embedded"
+                aria-label="Search"
+                title="Search"
+              >
+                <Icon name="search" size={14} />
+              </button>
             </div>
+            {/* Desktop / Laptop outer search button */}
             <button type="submit" className="discovery-search__submit">
               Search
             </button>
           </form>
         )}
 
-        <div className="discovery-filters">
+        {/* Mobile Advance Filter Corner Link / Button */}
+        <div className="discovery-mobile-corner-bar">
+          <button
+            type="button"
+            className="discovery-adv-filter-link"
+            onClick={() => setIsMobileFiltersOpen(true)}
+            aria-expanded={isMobileFiltersOpen}
+            aria-controls="discovery-filters-group"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            <span>Advance filter</span>
+            {hasActiveFilters && (
+              <span className="discovery-mobile-filter-badge" aria-label="Active filters applied">
+                {[
+                  selectedLanguage !== 'all',
+                  tab === 'explore' && windowFilter !== 'all',
+                  tab === 'explore' && sortFilter !== 'newest',
+                  tab === 'explore' && Boolean(tagFilter),
+                  tab === 'trending' && trendingWindow !== '24h',
+                ].filter(Boolean).length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Backdrop for mobile popup card */}
+        {isMobileFiltersOpen && (
+          <div
+            className="discovery-filters-backdrop"
+            onClick={() => setIsMobileFiltersOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        <div
+          id="discovery-filters-group"
+          className={`discovery-filters${isMobileFiltersOpen ? ' is-mobile-open' : ''}`}
+        >
+          {/* Header for mobile popup card */}
+          <div className="discovery-filters__card-header">
+            <span className="discovery-filters__card-title">Filter Snippets</span>
+            <button
+              type="button"
+              className="discovery-filters__card-close"
+              onClick={() => setIsMobileFiltersOpen(false)}
+              aria-label="Close filters"
+            >
+              ✕
+            </button>
+          </div>
           <div className="discovery-field">
             <label className="discovery-field__label" htmlFor="discovery-language">
               Language
@@ -550,10 +444,7 @@ export const DiscoveryPage: React.FC = () => {
               <Select
                 id="trending-window"
                 value={trendingWindow}
-                onChange={(val) => {
-                  setTrendingPage(0);
-                  setTrendingWindow(val as '24h' | '7d' | '30d');
-                }}
+                onChange={(val) => setTrendingWindow(val as '24h' | '7d' | '30d')}
                 options={[
                   { value: '24h', label: 'Last 24 hours' },
                   { value: '7d', label: 'Last 7 days' },
@@ -649,6 +540,17 @@ export const DiscoveryPage: React.FC = () => {
               </div>
             </>
           )}
+
+          {/* Mobile popup card footer button */}
+          <div className="discovery-filters__card-footer">
+            <button
+              type="button"
+              className="discovery-filters__card-apply"
+              onClick={() => setIsMobileFiltersOpen(false)}
+            >
+              Apply Filters
+            </button>
+          </div>
         </div>
 
         {tab === 'explore' && hasActiveFilters && (
@@ -680,6 +582,7 @@ export const DiscoveryPage: React.FC = () => {
           </div>
         )}
       </section>
+      )}
 
       {!isAuthenticated && (
         <div className="discovery-login-prompt">
@@ -694,185 +597,74 @@ export const DiscoveryPage: React.FC = () => {
         </div>
       )}
 
-      {tab === 'explore' && exploreError && data !== null && (
-        <div className="discovery-alert" role="alert">
-          <span>Couldn&apos;t refresh results. Showing the last loaded snippets.</span>
-          <button
-            type="button"
-            className="discovery-alert__retry"
-            onClick={() => setExploreTick((t) => t + 1)}
-          >
-            <Icon name="refresh" size={13} />
-            <span>Retry</span>
-          </button>
-        </div>
-      )}
-
       <div className="discovery-results">
-        <h2 className="discovery-results__title">
-          {tab === 'explore' ? 'Latest public pastes' : tab === 'trending' ? 'Trending pastes' : 'Most saved'}
-        </h2>
-        {!activeTabLoading && (
-          <span className="discovery-results__count">{pluralizeCount(totalElements)}</span>
+        <h2 className="discovery-results__title">{titles[tab]}</h2>
+        {!activeTabLoading && activeFeed.totalElements !== undefined && (
+          <span className="discovery-results__count">{pluralizeCount(activeFeed.totalElements)}</span>
         )}
       </div>
 
-      {tab === 'explore' && isFetching && data !== null && (
-        <div className="discovery-status" role="status">
-          <span className="discovery-status__dot" aria-hidden="true" />
-          <span>Updating results…</span>
+      {activeFeed.error && activeFeed.loaded && (
+        <div className="discovery-alert" role="alert">
+          <span>{activeFeed.failed === 'more' ? 'Could not load more snippets.' : 'Could not refresh results.'} Showing the last loaded snippets.</span>
+          <button type="button" className="discovery-alert__retry" onClick={activeFeed.retry} disabled={activeFeed.loading}>
+            <Icon name="refresh" size={13} /><span>Retry</span>
+          </button>
         </div>
       )}
-      {tab === 'trending' && trendingLoading && trendingData !== null && (
-        <div className="discovery-status" role="status">
-          <span className="discovery-status__dot" aria-hidden="true" />
-          <span>Updating results…</span>
-        </div>
-      )}
-      {tab === 'most-saved' && mostSavedLoading && mostSavedData !== null && (
+      {activeFeed.loading && activeFeed.loaded && (
         <div className="discovery-status" role="status">
           <span className="discovery-status__dot" aria-hidden="true" />
           <span>Updating results…</span>
         </div>
       )}
 
-      {tab === 'explore' ? (
-        exploreError && data === null ? (
-          <section className="discovery-state" aria-label="Failed to connect to registry">
-            <div className="discovery-state__icon" aria-hidden="true">
-              <Icon name="alert" size={24} />
-            </div>
-            <h3 className="discovery-state__title">Failed to connect to registry</h3>
-            <p className="discovery-state__body">
-              {exploreError}
-            </p>
-            <button
-              type="button"
-              className="discovery-state__action"
-              onClick={() => setExploreTick((t) => t + 1)}
-            >
-              <Icon name="refresh" size={14} />
-              <span>Retry Connection</span>
-            </button>
-          </section>
-        ) : data === null ? (
-          <Loading
-            variant="card"
-            message="Fetching snippets from public registry..."
-            className="min-h-[400px]"
-          />
-        ) : items.length === 0 ? (
-          <section className="discovery-empty" role="region" aria-labelledby="discovery-empty-heading">
-            <div className="discovery-empty__icon" aria-hidden="true">
-              <Icon name="file" size={26} />
-            </div>
-            <h3 id="discovery-empty-heading" className="discovery-empty__title">
-              No public pastes found
-            </h3>
-            <p className="discovery-empty__body">
-              {hasActiveFilters
-                ? 'No eligible public snippets match these filters. Try clearing them or a different search.'
-                : 'Be the first to publish a public snippet to the community registry.'}
-            </p>
-            {hasActiveFilters && (
-              <button type="button" className="discovery-empty__action" onClick={handleClearFilters}>
-                <Icon name="refresh" size={14} />
-                <span>Clear filters</span>
-              </button>
-            )}
-          </section>
-        ) : (
-          renderGrid(isFetching)
-        )
-      ) : tab === 'trending' ? (
-        trendingError && trendingData === null ? (
-          <section className="discovery-state" aria-label="Could not load trending snippets">
-            <div className="discovery-state__icon" aria-hidden="true">
-              <Icon name="alert" size={24} />
-            </div>
-            <h3 className="discovery-state__title">Could not load trending snippets</h3>
-            <p className="discovery-state__body">Please try again in a moment.</p>
-            <button
-              type="button"
-              className="discovery-state__action"
-              onClick={() => setTrendingTick((t) => t + 1)}
-            >
-              <Icon name="refresh" size={14} />
-              <span>Retry</span>
-            </button>
-          </section>
-        ) : trendingData === null ? (
-          <Loading variant="card" message="Calculating trending momentum..." className="min-h-[400px]" />
-        ) : items.length === 0 ? (
-          <section className="discovery-empty" role="region" aria-labelledby="discovery-trending-empty">
-            <div className="discovery-empty__icon" aria-hidden="true">
-              <Icon name="file" size={26} />
-            </div>
-            <h3 id="discovery-trending-empty" className="discovery-empty__title">
-              No trending snippets yet
-            </h3>
-            <p className="discovery-empty__body">
-              Pastes with recent views and saves will appear here.
-            </p>
-          </section>
-        ) : (
-          renderGrid(trendingLoading)
-        )
-      ) : mostSavedError && mostSavedData === null ? (
-        <section className="discovery-state" aria-label="Could not load most-saved snippets">
-          <div className="discovery-state__icon" aria-hidden="true">
-            <Icon name="alert" size={24} />
-          </div>
-          <h3 className="discovery-state__title">Could not load most-saved snippets</h3>
-          <p className="discovery-state__body">Please try again in a moment.</p>
-          <button
-            type="button"
-            className="discovery-state__action"
-            onClick={() => setMostSavedTick((t) => t + 1)}
-          >
-            <Icon name="refresh" size={14} />
-            <span>Retry</span>
+      {tab === 'following' && authLoading ? (
+        <DiscoveryPageSkeleton resultsOnly />
+      ) : tab === 'following' && !isAuthenticated ? (
+        <section className="discovery-empty" aria-labelledby="following-login-heading">
+          <h3 id="following-login-heading" className="discovery-empty__title">Log in to see your Following feed</h3>
+          <p className="discovery-empty__body">Recent public pastes from developers you follow appear here.</p>
+          <Link to="/login" className="discovery-empty__action">Log in</Link>
+          <Link to="/developers" className="discovery-empty__action">Discover developers</Link>
+        </section>
+      ) : activeFeed.error && !activeFeed.loaded ? (
+        <section className="discovery-state" aria-label={errors[tab]}>
+          <div className="discovery-state__icon" aria-hidden="true"><Icon name="alert" size={24} /></div>
+          <h3 className="discovery-state__title">{errors[tab]}</h3>
+          <p className="discovery-state__body">{tab === 'explore' ? 'Unable to load public pastes. Please check your network connection.' : 'Please try again in a moment.'}</p>
+          <button type="button" className="discovery-state__action" onClick={activeFeed.retry} disabled={activeFeed.loading}>
+            <Icon name="refresh" size={14} /><span>{tab === 'explore' ? 'Retry Connection' : 'Retry'}</span>
           </button>
         </section>
-      ) : mostSavedData === null ? (
-        <Loading variant="card" message="Loading most-saved snippets..." className="min-h-[400px]" />
+      ) : activeTabLoading ? (
+        <DiscoveryPageSkeleton resultsOnly />
       ) : items.length === 0 ? (
-        <section className="discovery-empty" role="region" aria-labelledby="discovery-most-saved-empty">
-          <div className="discovery-empty__icon" aria-hidden="true">
-            <Icon name="file" size={26} />
-          </div>
-          <h3 id="discovery-most-saved-empty" className="discovery-empty__title">
-            No saved snippets yet
-          </h3>
+        <section className="discovery-empty" role="region" aria-labelledby="discovery-empty-heading">
+          <div className="discovery-empty__icon" aria-hidden="true"><Icon name="file" size={26} /></div>
+          <h3 id="discovery-empty-heading" className="discovery-empty__title">{emptyTitles[tab]}</h3>
           <p className="discovery-empty__body">
-            Use the Save button on a public snippet to add it here.
+            {tab === 'following' ? 'Follow developers to see their eligible public pastes here. Your network may not have published any yet.'
+              : tab === 'trending' ? 'Pastes with recent views and saves will appear here.'
+              : tab === 'most-saved' ? 'Use the Save button on a public snippet to add it here.'
+              : hasActiveFilters ? 'No eligible public snippets match these filters. Try clearing them or a different search.'
+              : 'Be the first to publish a public snippet to the community registry.'}
           </p>
-        </section>
-      ) : (
-        renderGrid(mostSavedLoading)
-      )}
-
-      {!activeTabError && !activeTabLoading && totalPages > 1 && (
-        <div className="discovery-pagination">
-          <span>
-            Page {currentPage + 1} of {totalPages} &middot; {totalElements} snippets
-          </span>
-          <div className="discovery-pagination__controls">
-            <button
-              type="button"
-              className="discovery-pagination__btn"
-              onClick={goPrev}
-              disabled={isFirstPage}
-            >
-              Previous
+          {tab === 'following' && <Link to="/developers" className="discovery-empty__action">Discover developers</Link>}
+          {tab === 'explore' && hasActiveFilters && (
+            <button type="button" className="discovery-empty__action" onClick={handleClearFilters}>
+              <Icon name="refresh" size={14} /><span>Clear filters</span>
             </button>
-            <button
-              type="button"
-              className="discovery-pagination__btn"
-              onClick={goNext}
-              disabled={isLastPage}
-            >
-              Next
+          )}
+        </section>
+      ) : renderGrid(activeFeed.loading)}
+
+      {activeFeed.loaded && activeFeed.hasMore && !activeFeed.error && (
+        <div className="discovery-pagination">
+          <span>{items.length} snippets loaded</span>
+          <div className="discovery-pagination__controls">
+            <button type="button" className="discovery-pagination__btn" onClick={activeFeed.loadMore} disabled={activeFeed.loading}>
+              {activeFeed.loading ? 'Loading…' : 'Load more'}
             </button>
           </div>
         </div>

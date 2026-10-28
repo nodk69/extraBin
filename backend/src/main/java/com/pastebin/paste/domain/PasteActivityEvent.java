@@ -29,6 +29,18 @@ public class PasteActivityEvent {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "source_comment_id")
+    private Long sourceCommentId;
+
+    @Column(name = "source_reply_id")
+    private Long sourceReplyId;
+
+    @Column(name = "active", nullable = false)
+    private boolean active = true;
+
+    @Column(name = "view_bucket")
+    private Long viewBucket;
+
     public PasteActivityEvent() {
     }
 

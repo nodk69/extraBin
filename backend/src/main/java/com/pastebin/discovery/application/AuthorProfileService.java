@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -41,13 +42,16 @@ public class AuthorProfileService {
     private final UserRepository userRepository;
     private final PasteRepository pasteRepository;
     private final PasteSummaryMapper summaryMapper;
+    private final com.pastebin.identity.infrastructure.UserFollowRepository followRepository;
 
     public AuthorProfileService(UserRepository userRepository,
                                 PasteRepository pasteRepository,
-                                PasteSummaryMapper summaryMapper) {
+                                PasteSummaryMapper summaryMapper,
+                                com.pastebin.identity.infrastructure.UserFollowRepository followRepository) {
         this.userRepository = userRepository;
         this.pasteRepository = pasteRepository;
         this.summaryMapper = summaryMapper;
+        this.followRepository = followRepository;
     }
 
     /**
@@ -56,6 +60,11 @@ public class AuthorProfileService {
      */
     @Transactional(readOnly = true)
     public PublicAuthorProfileResponse getPublicProfile(String username) {
+        return getPublicProfile(username, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicAuthorProfileResponse getPublicProfile(String username, Long viewerId) {
         User user = requireUser(username);
         Instant now = Instant.now();
 
@@ -69,23 +78,88 @@ public class AuthorProfileService {
                 user.getId(), now, PageRequest.of(0, RECENT_WORK_LIMIT));
         List<PasteSummaryResponse> recentWork = summaryMapper.toAuthorSummaries(recent, user.getUsername());
 
+        List<Paste> popular = pasteRepository.findPopularEligiblePublicPastesByAuthor(
+                user.getId(), now, PageRequest.of(0, 2));
+        List<PasteSummaryResponse> popularWork = summaryMapper.toAuthorSummaries(popular, user.getUsername());
+
+        long languagesCount = pasteRepository.countDistinctLanguagesByAuthor(user.getId(), now);
+
+        List<Object[]> langRows = pasteRepository.findTopLanguagesByAuthor(user.getId(), now, PageRequest.of(0, 3));
+        List<String> topLanguages = langRows.stream()
+                .map(r -> (String) r[0])
+                .filter(l -> l != null && !l.isBlank())
+                .toList();
+
         return new PublicAuthorProfileResponse(
                 user.getUsername(),
+                user.getDisplayName(),
+                user.getBio(),
+                user.getAvatarUrl(),
+                user.getGithubUrl(),
+                user.getLinkedinUrl(),
+                user.getXUrl(),
                 user.getCreatedAt(),
                 publicPasteCount,
                 totalViews,
                 totalSaves,
-                recentWork);
+                recentWork,
+                popularWork,
+                topLanguages,
+                languagesCount,
+                followRepository.countByFollowedId(user.getId()),
+                followRepository.countByFollowerId(user.getId()),
+                viewerId != null && !viewerId.equals(user.getId()) && followRepository.existsByFollowerIdAndFollowedId(viewerId, user.getId()));
     }
 
-    /** Server-side paginated public work, newest first with a unique publicId tie-break. */
+    /** Server-side paginated public work, supporting search query, language filter, and verified sort options with unique publicId tie-break. */
     @Transactional(readOnly = true)
     public PagedResponse<PasteSummaryResponse> getPublicPastes(String username, int page, int size) {
+        return getPublicPastes(username, null, null, null, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<PasteSummaryResponse> getPublicPastes(String username, String q, String language, String sort, int page, int size) {
         User user = requireUser(username);
-        Page<Paste> result = pasteRepository.findEligiblePublicPastesByAuthor(
-                user.getId(), Instant.now(), PageRequest.of(page, size, NEWEST_FIRST));
+        String normLang = normalizeLanguage(language);
+        String searchTerm = buildSearchTerm(q);
+        Sort sortSpec = resolveSort(sort);
+
+        Page<Paste> result = (normLang == null && searchTerm == null && sortSpec.equals(NEWEST_FIRST))
+                ? pasteRepository.findEligiblePublicPastesByAuthor(user.getId(), Instant.now(), PageRequest.of(page, size, NEWEST_FIRST))
+                : pasteRepository.findAuthorDiscoveryPastes(user.getId(), Instant.now(), normLang, searchTerm, PageRequest.of(page, size, sortSpec));
+
         List<PasteSummaryResponse> items = summaryMapper.toAuthorSummaries(result.getContent(), user.getUsername());
         return PagedResponse.of(items, result.getNumber(), result.getSize(), result.getTotalElements());
+    }
+
+    private Sort resolveSort(String sort) {
+        Sort publicIdTieBreak = Sort.by(Sort.Direction.ASC, "publicId");
+        String value = (sort == null || sort.isBlank()) ? "newest" : sort.toLowerCase(Locale.ROOT);
+        return switch (value) {
+            case "newest" -> Sort.by(Sort.Direction.DESC, "createdAt").and(publicIdTieBreak);
+            case "oldest" -> Sort.by(Sort.Direction.ASC, "createdAt").and(publicIdTieBreak);
+            case "updated" -> Sort.by(Sort.Direction.DESC, "updatedAt").and(publicIdTieBreak);
+            case "views", "most-viewed" -> Sort.by(Sort.Direction.DESC, "views").and(Sort.by(Sort.Direction.DESC, "createdAt")).and(publicIdTieBreak);
+            case "stars", "most-starred", "saves", "most-saved" -> Sort.by(Sort.Direction.DESC, "starsCount").and(Sort.by(Sort.Direction.DESC, "createdAt")).and(publicIdTieBreak);
+            case "title-asc", "title" -> Sort.by(Sort.Direction.ASC, "title").and(publicIdTieBreak);
+            case "title-desc" -> Sort.by(Sort.Direction.DESC, "title").and(publicIdTieBreak);
+            default -> Sort.by(Sort.Direction.DESC, "createdAt").and(publicIdTieBreak);
+        };
+    }
+
+    private String normalizeLanguage(String language) {
+        if (language == null || language.isBlank() || language.equalsIgnoreCase("all")) {
+            return null;
+        }
+        return language.toLowerCase(Locale.ROOT).trim();
+    }
+
+    private String buildSearchTerm(String q) {
+        if (q == null || q.isBlank()) {
+            return null;
+        }
+        String trimmed = q.trim().toLowerCase(Locale.ROOT);
+        return trimmed.length() > 100 ? trimmed.substring(0, 100) : trimmed;
     }
 
     /**

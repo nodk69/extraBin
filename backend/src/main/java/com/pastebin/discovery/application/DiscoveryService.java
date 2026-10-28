@@ -56,6 +56,7 @@ public class DiscoveryService {
             new ConcurrentHashMap<>();
     private final AtomicLong trendingGeneration = new AtomicLong();
     private final TransactionTemplate readOnlyTransaction;
+    private TrendingPolicy trendingPolicy = new TrendingPolicy();
 
     public DiscoveryService(PasteRepository pasteRepository,
                             PasteSummaryMapper summaryMapper,
@@ -72,7 +73,7 @@ public class DiscoveryService {
                             PasteSummaryMapper summaryMapper,
                             com.pastebin.paste.infrastructure.PasteActivityEventRepository activityEventRepository,
                             org.springframework.beans.factory.ObjectProvider<com.pastebin.discovery.infrastructure.meilisearch.MeilisearchIndexService> meilisearchIndexServiceProvider,
-                            PlatformTransactionManager transactionManager) {
+                            PlatformTransactionManager transactionManager, TrendingPolicy trendingPolicy) {
         this.pasteRepository = pasteRepository;
         this.summaryMapper = summaryMapper;
         this.activityEventRepository = activityEventRepository;
@@ -80,6 +81,7 @@ public class DiscoveryService {
         TransactionTemplate template = new TransactionTemplate(transactionManager);
         template.setReadOnly(true);
         this.readOnlyTransaction = template;
+        this.trendingPolicy = trendingPolicy;
     }
 
     /**
@@ -91,33 +93,38 @@ public class DiscoveryService {
         String normWindow = (window == null || window.isBlank()) ? "24h" : window.toLowerCase(Locale.ROOT);
         String cacheKey = normWindow + ":" + (normLang == null ? "all" : normLang) + ":" + page + ":" + size;
 
-        long generation = trendingGeneration.get();
-        TrendingEntry cached = trendingCache.getIfPresent(cacheKey);
-        if (cached != null && cached.generation() == generation) {
-            return withoutExpired(cached.response(), Instant.now());
-        }
-
-        String flightKey = generation + "|" + cacheKey;
-        CompletableFuture<PagedResponse<PasteSummaryResponse>> load = new CompletableFuture<>();
-        CompletableFuture<PagedResponse<PasteSummaryResponse>> inFlight = trendingLoads.putIfAbsent(flightKey, load);
-        if (inFlight != null) {
-            return withoutExpired(awaitLoad(inFlight), Instant.now());
-        }
-
-        try {
-            PagedResponse<PasteSummaryResponse> loaded = readOnlyTransaction == null
-                    ? loadTrending(normWindow, normLang, page, size)
-                    : readOnlyTransaction.execute(status -> loadTrending(normWindow, normLang, page, size));
-            if (trendingGeneration.get() == generation) {
-                trendingCache.put(cacheKey, new TrendingEntry(generation, loaded));
+        while (true) {
+            long generation = trendingGeneration.get();
+            TrendingEntry cached = trendingCache.getIfPresent(cacheKey);
+            if (cached != null && cached.generation() == generation) {
+                return withoutExpired(cached.response(), trendingPolicy.now());
             }
-            load.complete(loaded);
-            return loaded;
-        } catch (RuntimeException | Error e) {
-            load.completeExceptionally(e);
-            throw e;
-        } finally {
-            trendingLoads.remove(flightKey, load);
+
+            String flightKey = generation + "|" + cacheKey;
+            CompletableFuture<PagedResponse<PasteSummaryResponse>> load = new CompletableFuture<>();
+            CompletableFuture<PagedResponse<PasteSummaryResponse>> inFlight = trendingLoads.putIfAbsent(flightKey, load);
+            if (inFlight != null) {
+                var response = awaitLoad(inFlight);
+                if (trendingGeneration.get() != generation) continue;
+                return withoutExpired(response, trendingPolicy.now());
+            }
+
+            try {
+                PagedResponse<PasteSummaryResponse> loaded = readOnlyTransaction == null
+                        ? loadTrending(normWindow, normLang, page, size)
+                        : readOnlyTransaction.execute(status -> loadTrending(normWindow, normLang, page, size));
+                if (trendingGeneration.get() == generation) {
+                    trendingCache.put(cacheKey, new TrendingEntry(generation, loaded));
+                }
+                load.complete(loaded);
+                if (trendingGeneration.get() != generation) continue;
+                return withoutExpired(loaded, trendingPolicy.now());
+            } catch (RuntimeException | Error e) {
+                load.completeExceptionally(e);
+                throw e;
+            } finally {
+                trendingLoads.remove(flightKey, load);
+            }
         }
     }
 
@@ -149,8 +156,8 @@ public class DiscoveryService {
     }
 
     private PagedResponse<PasteSummaryResponse> loadTrending(String normWindow, String normLang, int page, int size) {
-        Instant now = Instant.now();
-        Instant windowStart = resolveTrendingWindowStart(normWindow, now);
+        Instant now = trendingPolicy.now();
+        Instant windowStart = now.minus(trendingPolicy.window(normWindow));
 
         // Fetch top paste IDs and scores according to genuine activity in the window
         List<Object[]> rows = activityEventRepository.findTrendingPasteIdsAndScores(
@@ -176,7 +183,7 @@ public class DiscoveryService {
             List<Paste> orderedPastes = new ArrayList<>();
             for (Long id : pasteIds) {
                 Paste p = pasteMap.get(id);
-                if (p != null) {
+                if (TrendingPolicy.isEligible(p, now)) {
                     orderedPastes.add(p);
                 }
             }
@@ -186,15 +193,6 @@ public class DiscoveryService {
         }
 
         return PagedResponse.of(summaries, page, size, totalElements);
-    }
-
-    private Instant resolveTrendingWindowStart(String window, Instant now) {
-        return switch (window.toLowerCase(Locale.ROOT)) {
-            case "24h" -> now.minus(Duration.ofHours(24));
-            case "7d" -> now.minus(Duration.ofDays(7));
-            case "30d" -> now.minus(Duration.ofDays(30));
-            default -> now.minus(Duration.ofHours(24));
-        };
     }
 
     /**

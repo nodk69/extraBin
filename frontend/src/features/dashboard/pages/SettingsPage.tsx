@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon, IconName } from '../../../components/ui/PaperIcon';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
+import { ProfileSocialLinks } from '../../../components/ui/ProfileSocialLinks';
+import { SettingsSkeleton } from '../../../components/ui/SkeletonLayouts';
 import { Select } from '../../../components/ui/dropdown';
 import { useAuth } from '../../auth/context/AuthContext';
-import { apiClient } from '../../../lib/api-client/client';
+import { apiClient, ApiError } from '../../../lib/api-client/client';
 import { accountApi } from '../api/accountApi';
 import {
   loadPasteDefaults,
@@ -15,10 +17,12 @@ import {
   StoredEditorPrefsV1,
 } from '../utils/userPreferences';
 import { Visibility, ExpirationPolicy } from '../../pastes/types/paste';
+import '../settings-profile.css';
 
 type SettingsTab =
   | 'profile'
   | 'security'
+  | 'notifications'
   | 'defaults'
   | 'privacy'
   | 'editor'
@@ -35,6 +39,7 @@ interface TabDefinition {
 const SETTINGS_TABS: TabDefinition[] = [
   { id: 'profile', label: 'Profile', icon: 'user', description: 'Account identity, credentials, and role status' },
   { id: 'security', label: 'Account & Security', icon: 'lock', description: 'Authentication, password reset, and active sessions' },
+  { id: 'notifications', label: 'Notifications', icon: 'spark', description: 'In-app notification delivery and follow alert preferences' },
   { id: 'defaults', label: 'Paste Defaults', icon: 'settings', description: 'Default visibility, expiration, and language for new pastes' },
   { id: 'privacy', label: 'Privacy & Sharing', icon: 'key', description: 'Bearer share tokens and client-side encryption guarantees' },
   { id: 'editor', label: 'Appearance & Editor', icon: 'code', description: 'Terminal font size, indentation tabs, and line numbers' },
@@ -43,11 +48,71 @@ const SETTINGS_TABS: TabDefinition[] = [
 ];
 
 export const SettingsPage: React.FC = () => {
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, logout, updateProfile } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const tabButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Public profile editor state
+  const [profileForm, setProfileForm] = useState({
+    displayName: '',
+    bio: '',
+    avatarUrl: '',
+    githubUrl: '',
+    linkedinUrl: '',
+    xUrl: '',
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSavedMsg, setProfileSavedMsg] = useState<string | null>(null);
+  const [profileErrorMsg, setProfileErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    setProfileForm({
+      displayName: user.displayName || '',
+      bio: user.bio || '',
+      avatarUrl: user.avatarUrl || '',
+      githubUrl: user.githubUrl || '',
+      linkedinUrl: user.linkedinUrl || '',
+      xUrl: user.xUrl || '',
+    });
+  }, [user]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSavingProfile) return;
+    setProfileSavedMsg(null);
+    setProfileErrorMsg(null);
+
+    if (!updateProfile) {
+      setProfileErrorMsg('Profile editing is unavailable right now. Please refresh and try again.');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      await updateProfile({
+        displayName: profileForm.displayName.trim() || null,
+        bio: profileForm.bio.trim() || null,
+        avatarUrl: profileForm.avatarUrl.trim() || null,
+        githubUrl: profileForm.githubUrl.trim() || null,
+        linkedinUrl: profileForm.linkedinUrl.trim() || null,
+        xUrl: profileForm.xUrl.trim() || null,
+      });
+      setProfileSavedMsg('Public profile updated. Your changes are live.');
+      setTimeout(() => setProfileSavedMsg(null), 5000);
+    } catch (cause) {
+      const detail = cause instanceof ApiError
+        ? cause.detail
+        : cause instanceof Error
+          ? cause.message
+          : null;
+      setProfileErrorMsg(detail || 'Could not update your profile. Please try again.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   // Paste Defaults state
   const [pasteDefaults, setPasteDefaults] = useState<StoredPasteDefaultsV1>(loadPasteDefaults());
@@ -67,11 +132,57 @@ export const SettingsPage: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Notification preferences state
+  const [notifyOnReplies, setNotifyOnReplies] = useState<boolean>(true);
+  const [notifyOnFollows, setNotifyOnFollows] = useState<boolean>(true);
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState<boolean>(false);
+  const [isSavingNotifs, setIsSavingNotifs] = useState<boolean>(false);
+  const [notifSavedMsg, setNotifSavedMsg] = useState<string | null>(null);
+  const [notifErrorMsg, setNotifErrorMsg] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/login');
     }
   }, [isLoading, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setIsLoadingNotifs(true);
+      apiClient.get<{ notifyOnReplies: boolean; notifyOnFollows: boolean }>('/notifications/preferences')
+        .then((res) => {
+          if (res.data) {
+            setNotifyOnReplies(res.data.notifyOnReplies);
+            setNotifyOnFollows(res.data.notifyOnFollows);
+          }
+        })
+        .catch(() => {
+          // Fallback to default true if preferences API unavailable
+        })
+        .finally(() => {
+          setIsLoadingNotifs(false);
+        });
+    }
+  }, [isAuthenticated]);
+
+  const handleSaveNotificationPrefs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingNotifs(true);
+    setNotifSavedMsg(null);
+    setNotifErrorMsg(null);
+    try {
+      await apiClient.put('/notifications/preferences', {
+        notifyOnReplies,
+        notifyOnFollows,
+      });
+      setNotifSavedMsg('Notification preferences updated successfully.');
+      setTimeout(() => setNotifSavedMsg(null), 4000);
+    } catch {
+      setNotifErrorMsg('Failed to update notification preferences. Please try again.');
+    } finally {
+      setIsSavingNotifs(false);
+    }
+  };
 
   // Handle keyboard navigation across sidebar tabs (ArrowDown, ArrowUp, Home, End)
   const handleKeyDownTab = (e: React.KeyboardEvent, index: number) => {
@@ -245,18 +356,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   if (isLoading || !user) {
-    return (
-      <div className="workspace">
-        <div className="py-24 text-center">
-          <div className="inline-block animate-spin text-[#ff5c3d] mb-3">
-            <Icon name="spark" size={28} />
-          </div>
-          <div className="font-mono text-xs text-[#74786f] tracking-wider uppercase">
-            Loading settings...
-          </div>
-        </div>
-      </div>
-    );
+    return <SettingsSkeleton />;
   }
 
   return (
@@ -291,9 +391,9 @@ export const SettingsPage: React.FC = () => {
         <div className="md:col-span-4 lg:col-span-3">
           <nav
             aria-label="Settings navigation"
-            className="paper-card p-2 space-y-1"
+            className="paper-card p-2"
           >
-            <div role="tablist" aria-orientation="vertical" className="space-y-1">
+            <div role="tablist" aria-orientation="horizontal" className="settings-tabs scroll-strip gap-1.5 py-0.5 md:flex-col md:gap-1">
             {SETTINGS_TABS.map((tab, idx) => {
               const isActive = activeTab === tab.id;
               return (
@@ -307,14 +407,14 @@ export const SettingsPage: React.FC = () => {
                   tabIndex={isActive ? 0 : -1}
                   onClick={() => setActiveTab(tab.id)}
                   onKeyDown={(e) => handleKeyDownTab(e, idx)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-xs font-mono font-bold transition-all border ${
+                  className={`shrink-0 md:shrink md:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs font-mono font-bold transition-all border whitespace-nowrap md:whitespace-normal ${
                     isActive
                       ? 'bg-[#17201d] text-white border-[#17201d] shadow-[2px_2px_0px_#ff5c3d]'
                       : 'bg-transparent text-[#17201d] border-transparent hover:bg-[#ebe7dc] hover:border-[#d5d0c5]'
                   }`}
                 >
                   <Icon name={tab.icon} size={15} className={isActive ? 'text-[#ff5c3d]' : 'text-[#74786f]'} />
-                  <span className="flex-1 truncate">{tab.label}</span>
+                  <span className="flex-1">{tab.label}</span>
                 </button>
               );
             })}
@@ -327,61 +427,253 @@ export const SettingsPage: React.FC = () => {
           {/* Panel 1: Profile */}
           {activeTab === 'profile' && (
             <div role="tabpanel" id="panel-profile" aria-labelledby="tab-profile" className="paper-card p-6 space-y-6">
-              <div className="border-b border-[#d5d0c5] pb-4 flex items-center justify-between">
-                <div>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#d5d0c5] pb-4">
+                <div className="min-w-0 flex-1">
                   <h2 className="text-xl font-bold text-[#17201d] font-mono m-0">Profile Overview</h2>
-                  <p className="text-xs text-[#74786f] font-mono mt-1">Verified account identity and credentials.</p>
+                  <p className="text-xs text-[#74786f] font-mono mt-1">
+                    Shape how you appear on your public author page and across discovery.
+                  </p>
                 </div>
-                <UserAvatar user={user} size="lg" showStatus={true} />
+                <Link
+                  to={`/users/${encodeURIComponent(user.username)}`}
+                  className="settings-profile__public-link"
+                >
+                  <Icon name="external-link" size={13} />
+                  <span>View public profile</span>
+                </Link>
               </div>
 
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] space-y-1">
-                  <label className="text-[11px] font-bold text-[#74786f] uppercase tracking-wider block font-mono">
-                    Username
-                  </label>
-                  <div className="font-mono text-sm font-bold text-[#17201d]">{user.username}</div>
+              {profileSavedMsg && (
+                <div className="p-3 rounded-lg bg-[#f0fdf4] text-[#166534] border border-[#86efac] text-xs font-mono font-semibold">
+                  {profileSavedMsg}
                 </div>
+              )}
 
-                <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] space-y-1">
-                  <label className="text-[11px] font-bold text-[#74786f] uppercase tracking-wider block font-mono">
-                    Email Address
-                  </label>
-                  <div className="font-mono text-sm font-bold text-[#17201d] flex items-center justify-between">
-                    <span>{user.email}</span>
-                    {user.emailVerified ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#10b981]/20 text-[#047857] font-mono font-bold">
-                        Verified
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#f59e0b]/20 text-[#b45309] font-mono font-bold">
-                        Unverified
-                      </span>
-                    )}
-                  </div>
+              {profileErrorMsg && (
+                <div className="p-3 rounded-lg bg-[#fef2f2] text-[#991b1b] border border-[#fca5a5] text-xs font-mono font-semibold">
+                  {profileErrorMsg}
                 </div>
+              )}
 
-                <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] space-y-1">
-                  <label className="text-[11px] font-bold text-[#74786f] uppercase tracking-wider block font-mono">
-                    Account Role
-                  </label>
-                  <div className="font-mono text-sm font-bold text-[#17201d]">{user.role || 'ROLE_USER'}</div>
-                </div>
-
-                {user.createdAt && (
-                  <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] space-y-1">
-                    <label className="text-[11px] font-bold text-[#74786f] uppercase tracking-wider block font-mono">
-                      Member Since
-                    </label>
-                    <div className="font-mono text-xs text-[#17201d]">
-                      {new Date(user.createdAt).toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
+              <div className="settings-profile__grid">
+                <form onSubmit={handleSaveProfile} className="settings-profile__form">
+                  <div className="settings-profile__avatar-row">
+                    <UserAvatar
+                      username={user.username}
+                      avatarUrl={profileForm.avatarUrl.trim() || null}
+                      size={64}
+                      showStatus
+                      alt={`@${user.username}`}
+                    />
+                    <div className="min-w-0">
+                      <p className="settings-profile__form-title">Display picture</p>
+                      <p className="settings-profile__hint">
+                        Use an HTTPS image URL, or leave blank to keep your initials or connected OAuth picture.
+                      </p>
                     </div>
                   </div>
-                )}
+
+                  <label className="settings-profile__field">
+                    <span className="settings-profile__label">Avatar URL</span>
+                    <input
+                      type="url"
+                      className="settings-profile__input"
+                      value={profileForm.avatarUrl}
+                      onChange={(e) => setProfileForm({ ...profileForm, avatarUrl: e.target.value })}
+                      placeholder="https://example.com/avatar.jpg"
+                      maxLength={500}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </label>
+
+                  <label className="settings-profile__field">
+                    <span className="settings-profile__label">Display name</span>
+                    <input
+                      type="text"
+                      className="settings-profile__input"
+                      value={profileForm.displayName}
+                      onChange={(e) => setProfileForm({ ...profileForm, displayName: e.target.value })}
+                      placeholder="How your name appears on your profile"
+                      maxLength={80}
+                      autoComplete="name"
+                    />
+                    <span className="settings-profile__counter">{profileForm.displayName.length}/80</span>
+                  </label>
+
+                  <label className="settings-profile__field">
+                    <span className="settings-profile__label">Bio</span>
+                    <textarea
+                      className="settings-profile__textarea"
+                      value={profileForm.bio}
+                      onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                      placeholder="A short note about what you build, write, or share."
+                      rows={4}
+                      maxLength={500}
+                    />
+                    <span className="settings-profile__counter">{profileForm.bio.length}/500</span>
+                  </label>
+
+                  <fieldset className="settings-profile__socials-fieldset">
+                    <legend className="settings-profile__legend">
+                      Social links
+                      <span className="settings-profile__optional">Optional</span>
+                    </legend>
+                    <p className="settings-profile__hint">
+                      Paste a full profile URL or a bare handle such as <code>@octocat</code>. Links are
+                      normalized to the canonical HTTPS profile.
+                    </p>
+
+                    <label className="settings-profile__field">
+                      <span className="settings-profile__label settings-profile__label--github">GitHub</span>
+                      <input
+                        type="text"
+                        className="settings-profile__input"
+                        value={profileForm.githubUrl}
+                        onChange={(e) => setProfileForm({ ...profileForm, githubUrl: e.target.value })}
+                        placeholder="@octocat or https://github.com/octocat"
+                        maxLength={255}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    </label>
+
+                    <label className="settings-profile__field">
+                      <span className="settings-profile__label settings-profile__label--linkedin">LinkedIn</span>
+                      <input
+                        type="text"
+                        className="settings-profile__input"
+                        value={profileForm.linkedinUrl}
+                        onChange={(e) => setProfileForm({ ...profileForm, linkedinUrl: e.target.value })}
+                        placeholder="https://linkedin.com/in/your-name"
+                        maxLength={255}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    </label>
+
+                    <label className="settings-profile__field">
+                      <span className="settings-profile__label settings-profile__label--x">X</span>
+                      <input
+                        type="text"
+                        className="settings-profile__input"
+                        value={profileForm.xUrl}
+                        onChange={(e) => setProfileForm({ ...profileForm, xUrl: e.target.value })}
+                        placeholder="@handle or https://x.com/handle"
+                        maxLength={255}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    </label>
+                  </fieldset>
+
+                  <div className="settings-profile__actions">
+                    <button
+                      type="submit"
+                      disabled={isSavingProfile}
+                      className="settings-profile__save"
+                    >
+                      {isSavingProfile ? 'Saving…' : 'Save profile'}
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-profile__reset"
+                      onClick={() =>
+                        setProfileForm({
+                          displayName: user.displayName || '',
+                          bio: user.bio || '',
+                          avatarUrl: user.avatarUrl || '',
+                          githubUrl: user.githubUrl || '',
+                          linkedinUrl: user.linkedinUrl || '',
+                          xUrl: user.xUrl || '',
+                        })
+                      }
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </form>
+
+                <aside className="settings-profile__preview-col" aria-label="Public profile preview">
+                  <div className="settings-profile__preview-label">
+                    <span>Live preview</span>
+                    <span className="settings-profile__preview-path">/users/{user.username}</span>
+                  </div>
+
+                  <div className="settings-profile__preview-card">
+                    <div className="settings-profile__preview-cover" aria-hidden="true">
+                      <span className="settings-profile__preview-dot" />
+                      <span className="settings-profile__preview-dot" />
+                      <span className="settings-profile__preview-dot" />
+                    </div>
+                    <div className="settings-profile__preview-body">
+                      <div className="settings-profile__preview-avatar">
+                        <UserAvatar
+                          username={user.username}
+                          avatarUrl={profileForm.avatarUrl.trim() || null}
+                          size={68}
+                          alt={`@${user.username}`}
+                        />
+                      </div>
+                      <p className="settings-profile__preview-name">
+                        {profileForm.displayName.trim() || `@${user.username}`}
+                      </p>
+                      {profileForm.displayName.trim() && (
+                        <p className="settings-profile__preview-handle">@{user.username}</p>
+                      )}
+                      <span className="settings-profile__preview-badge">Writer</span>
+                      <p className={`settings-profile__preview-bio${profileForm.bio.trim() ? '' : ' is-empty'}`}>
+                        {profileForm.bio.trim() || 'Your bio will appear here.'}
+                      </p>
+                      <ProfileSocialLinks
+                        githubUrl={profileForm.githubUrl}
+                        linkedinUrl={profileForm.linkedinUrl}
+                        xUrl={profileForm.xUrl}
+                        className="settings-profile__preview-socials"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="settings-profile__account-card">
+                    <p className="settings-profile__account-title">Account</p>
+                    <div className="settings-profile__account-row">
+                      <span>Username</span>
+                      <strong>{user.username}</strong>
+                    </div>
+                    <div className="settings-profile__account-row">
+                      <span>Email</span>
+                      <strong className="settings-profile__account-email">{user.email}</strong>
+                    </div>
+                    <div className="settings-profile__account-row">
+                      <span>Status</span>
+                      {user.emailVerified ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#10b981]/20 text-[#047857] font-mono font-bold">
+                          Verified
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#f59e0b]/20 text-[#b45309] font-mono font-bold">
+                          Unverified
+                        </span>
+                      )}
+                    </div>
+                    <div className="settings-profile__account-row">
+                      <span>Role</span>
+                      <strong>{user.role || 'ROLE_USER'}</strong>
+                    </div>
+                    {user.createdAt && (
+                      <div className="settings-profile__account-row">
+                        <span>Member since</span>
+                        <strong>
+                          {new Date(user.createdAt).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                </aside>
               </div>
             </div>
           )}
@@ -452,6 +744,89 @@ export const SettingsPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Panel: Notifications */}
+          {activeTab === 'notifications' && (
+            <div role="tabpanel" id="panel-notifications" aria-labelledby="tab-notifications" className="paper-card p-6 space-y-6">
+              <div className="border-b border-[#d5d0c5] pb-4">
+                <h2 className="text-xl font-bold text-[#17201d] font-mono m-0">Notification Preferences</h2>
+                <p className="text-xs text-[#74786f] font-mono mt-1">Manage in-app notification triggers and developer network activity alerts.</p>
+              </div>
+
+              {notifSavedMsg && (
+                <div className="p-3 rounded-lg bg-[#f0fdf4] text-[#166534] border border-[#86efac] text-xs font-mono font-semibold">
+                  {notifSavedMsg}
+                </div>
+              )}
+
+              {notifErrorMsg && (
+                <div className="p-3 rounded-lg bg-[#fef2f2] text-[#991b1b] border border-[#fca5a5] text-xs font-mono font-semibold">
+                  {notifErrorMsg}
+                </div>
+              )}
+
+              {isLoadingNotifs ? (
+                <div className="p-6 text-center font-mono text-xs text-[#74786f]">
+                  Loading notification preferences...
+                </div>
+              ) : (
+                <form onSubmit={handleSaveNotificationPrefs} className="space-y-4">
+                  <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] flex items-center justify-between gap-4">
+                    <div>
+                      <label htmlFor="notif-replies-checkbox" className="text-xs font-bold text-[#17201d] font-mono block cursor-pointer">
+                        Paste Replies &amp; Comments
+                      </label>
+                      <p className="text-[11px] text-[#74786f] font-mono m-0">
+                        Receive an in-app notification when another developer replies to or comments on one of your public pastes.
+                      </p>
+                    </div>
+                    <input
+                      id="notif-replies-checkbox"
+                      type="checkbox"
+                      checked={notifyOnReplies}
+                      onChange={(e) => setNotifyOnReplies(e.target.checked)}
+                      className="w-4 h-4 rounded border-[#d5d0c5] text-[#ff5c3d] focus:ring-0 cursor-pointer accent-[#ff5c3d]"
+                    />
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white border border-[#d5d0c5] flex items-center justify-between gap-4">
+                    <div>
+                      <label htmlFor="notif-follows-checkbox" className="text-xs font-bold text-[#17201d] font-mono block cursor-pointer">
+                        New Followers
+                      </label>
+                      <p className="text-[11px] text-[#74786f] font-mono m-0">
+                        Receive an in-app notification when another developer follows your public profile.
+                      </p>
+                    </div>
+                    <input
+                      id="notif-follows-checkbox"
+                      type="checkbox"
+                      checked={notifyOnFollows}
+                      onChange={(e) => setNotifyOnFollows(e.target.checked)}
+                      className="w-4 h-4 rounded border-[#d5d0c5] text-[#ff5c3d] focus:ring-0 cursor-pointer accent-[#ff5c3d]"
+                    />
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[#f9fafb] border border-[#e5e7eb] text-xs font-mono text-[#4b5563] space-y-1">
+                    <div className="font-bold text-[#17201d]">Browser Push Notifications:</div>
+                    <p className="m-0 leading-relaxed text-[11px]">
+                      Web push service worker delivery requires active server VAPID infrastructure. Currently, in-app notifications and unread badges are delivered instantaneously across sessions.
+                    </p>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingNotifs}
+                      className="py-2.5 px-5 rounded-lg bg-[#ff5c3d] text-[#17201d] text-xs font-bold font-mono shadow-[2px_2px_0px_#17201d] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_#17201d] transition-all disabled:opacity-50"
+                    >
+                      {isSavingNotifs ? 'Saving...' : 'Save Notification Preferences'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 

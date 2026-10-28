@@ -74,12 +74,12 @@ export const EditPasteModal: React.FC<EditPasteModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="modal-backdrop">
       <div 
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-modal-title"
-        className="w-full max-w-2xl rounded-2xl border-2 border-[#17201d] bg-[#faf8f2] p-6 shadow-[8px_10px_0px_#17201d] space-y-4 max-h-[90vh] overflow-y-auto"
+        className="modal-paper modal-wide"
       >
         <div className="flex items-center justify-between pb-3 border-b border-[#d5d0c5]">
           <div className="flex items-center gap-2.5 text-[#17201d]">
@@ -134,7 +134,7 @@ export const EditPasteModal: React.FC<EditPasteModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="u-form-grid modal-form-grid gap-4">
             <div>
               <label className="block text-xs font-semibold text-[#74786f] uppercase tracking-wider mb-1 font-mono">
                 Language
@@ -162,7 +162,7 @@ export const EditPasteModal: React.FC<EditPasteModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#d5d0c5]">
+          <div className="modal-actions border-t border-[#d5d0c5] pt-3">
             <button
               type="button"
               onClick={onClose}

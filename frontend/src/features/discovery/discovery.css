@@ -26,8 +26,12 @@
 .discovery-header {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   margin-bottom: 22px;
+}
+
+.discovery-header__text {
+  min-width: 0;
 }
 
 .discovery-eyebrow {
@@ -74,6 +78,27 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+}
+
+/* Laptop / Desktop Header:
+   Title and community subtitle on the left, tabs (Explore, Trending, Most saved)
+   aligned at the same level on the right side. */
+@media (min-width: 1024px) {
+  .discovery-header {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .discovery-header__text {
+    flex: 1 1 auto;
+  }
+
+  .discovery-header__row {
+    flex: 0 0 auto;
+    margin-bottom: 2px;
+  }
 }
 
 .discovery-header__actions {
@@ -229,6 +254,85 @@
   outline-offset: 2px;
 }
 
+/* Embedded search button inside right side of the search input on mobile */
+.discovery-search__submit-embedded {
+  display: none;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.16s ease, transform 0.1s ease;
+}
+
+.discovery-search__submit-embedded:hover {
+  background: var(--coral, #ff5c3d);
+  color: var(--ink);
+}
+
+.discovery-search__submit-embedded:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+/* Mobile Advance Filter Corner Bar & Link */
+.discovery-mobile-corner-bar {
+  display: none;
+}
+
+.discovery-adv-filter-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 4px 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--coral, #ff5c3d);
+  cursor: pointer;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.discovery-adv-filter-link:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.discovery-filters-backdrop {
+  display: none;
+}
+
+.discovery-filters__card-header {
+  display: none;
+}
+
+.discovery-filters__card-footer {
+  display: none;
+}
+
+.discovery-mobile-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--coral, #ff5c3d);
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
 .discovery-filters {
   display: flex;
   flex-wrap: wrap;
@@ -264,6 +368,71 @@
   min-width: 130px;
   max-width: 100%;
   border-radius: 10px;
+}
+
+/* Laptop / Desktop Single Line Layout:
+   When space allows (>= 1024px), place the search field, search submit button,
+   and all filter dropdowns (Language, Time Window, Sort, Tags) on the EXACT same line. */
+@media (min-width: 1024px) {
+  .discovery-panel {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .discovery-search {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 8px;
+    flex: 1 1 200px;
+    min-width: 180px;
+  }
+
+  .discovery-search__field {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+
+  .discovery-search__input {
+    height: 38px;
+    padding: 0 10px 0 32px;
+    font-size: 12px;
+  }
+
+  .discovery-search__submit {
+    height: 38px;
+    padding: 0 14px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .discovery-filters {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .discovery-field {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .discovery-field .dropdown-select-control {
+    min-width: 128px;
+    max-width: 155px;
+  }
+
+  .discovery-field:nth-child(1) .dropdown-select-control {
+    min-width: 138px;
+  }
 }
 
 /* ------------------------------------------------------------- Tag cloud -- */
@@ -514,6 +683,39 @@
   color: var(--ink);
 }
 
+/* ------------------------------------------------ Developer discovery -- */
+.developer-discovery {
+  margin: 0 0 24px;
+  padding: 16px;
+  border: 1px solid #dcd7cb;
+  border-radius: 14px;
+  background: #faf8f2;
+}
+
+.developer-discovery__header,
+.developer-discovery__person {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.developer-discovery__header { margin-bottom: 12px; }
+.developer-discovery__header h2 { margin: 0; font: 700 15px "IBM Plex Mono", monospace; color: var(--ink); }
+.developer-discovery__header p { margin: 3px 0 0; color: #74786f; font-size: 12px; }
+.developer-discovery__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; }
+.developer-discovery__card { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 10px; border: 1px solid #e0dbcf; border-radius: 10px; background: #fff; }
+.developer-discovery__person { justify-content: flex-start; min-width: 0; color: var(--ink); font: 600 12px "IBM Plex Mono", monospace; text-decoration: none; overflow-wrap: anywhere; }
+.developer-discovery__person > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.developer-discovery__count { flex: 1 0 100%; margin-left: 40px; color: #74786f; font: 10px "IBM Plex Mono", monospace; }
+.developer-discovery__card { flex-wrap: wrap; }
+.developer-discovery__card .developer-follow { margin-left: auto; }
+.developer-discovery__pagination { display: flex; align-items: center; gap: 6px; font: 10px "IBM Plex Mono", monospace; }
+.developer-discovery__pagination button { min-width: 32px; min-height: 32px; border: 1px solid #d5d0c5; border-radius: 7px; background: #fff; font-size: 20px; line-height: 1; }
+.developer-discovery__pagination button:disabled { opacity: .45; }
+.developer-discovery__state { margin: 8px 0; color: #74786f; font-size: 12px; }
+.developer-discovery__state button { border: 0; background: transparent; color: #b94126; text-decoration: underline; cursor: pointer; }
+
 /* -------------------------------------------------------- Results header -- */
 .discovery-results {
   display: flex;
@@ -543,8 +745,8 @@
 /* ------------------------------------------------------------------ Grid -- */
 .discovery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr));
+  gap: var(--grid-gap);
   transition: opacity 0.2s ease;
 }
 
@@ -961,7 +1163,7 @@
 }
 
 /* --------------------------------------------------------- Responsive ---- */
-@media (max-width: 720px) {
+@media (max-width: 767.98px) {
   .discovery-header__row {
     align-items: stretch;
   }
@@ -980,12 +1182,141 @@
     flex-basis: 100%;
   }
 
+  .discovery-search {
+    width: 100%;
+    margin-bottom: 2px;
+  }
+
+  .discovery-search__field {
+    flex-basis: 100%;
+    position: relative;
+  }
+
+  /* Padding on right so text doesn't overlap embedded button */
+  .discovery-search__input {
+    padding-right: 44px;
+  }
+
+  /* Show embedded search button inside the right of the search bar */
+  .discovery-search__submit-embedded {
+    display: inline-flex;
+  }
+
+  /* Hide the bulky standalone search button on mobile */
   .discovery-search__submit {
-    flex: 1 1 auto;
+    display: none;
+  }
+
+  /* Display Advance filter link at the corner below the search bar */
+  .discovery-mobile-corner-bar {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: -6px;
+    margin-bottom: 2px;
+  }
+
+  /* Dimmed backdrop when card pops up */
+  .discovery-filters-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 100;
+  }
+
+  /* Filter popup card on mobile */
+  .discovery-filters {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 85vh;
+    overflow-y: auto;
+    z-index: 101;
+    background: #faf8f2;
+    border-radius: 20px 20px 0 0;
+    border-top: 2px solid var(--ink);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.2);
+    padding: 20px 18px 28px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    animation: discoverySlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .discovery-filters.is-mobile-open {
+    display: flex;
+  }
+
+  .discovery-filters__card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #d5d0c5;
+    margin-bottom: 2px;
+  }
+
+  .discovery-filters__card-title {
+    font-family: "DM Sans", system-ui, sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .discovery-filters__card-close {
+    appearance: none;
+    background: none;
+    border: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: #74786f;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  .discovery-filters__card-close:hover {
+    color: var(--ink);
+    background: #ece8de;
+  }
+
+  .discovery-filters__card-footer {
+    display: block;
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px solid #d5d0c5;
+  }
+
+  .discovery-filters__card-apply {
+    width: 100%;
+    padding: 11px;
+    background: var(--ink);
+    color: #ffffff;
+    border: 0;
+    border-radius: 10px;
+    font-family: "DM Sans", system-ui, sans-serif;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+
+  .discovery-filters__card-apply:hover {
+    background: var(--coral, #ff5c3d);
+    color: var(--ink);
   }
 
   .discovery-field {
-    flex: 1 1 140px;
+    width: 100%;
+    flex: 1 1 100%;
   }
 
   .discovery-select {
@@ -1004,7 +1335,16 @@
   }
 }
 
-@media (max-width: 520px) {
+@keyframes discoverySlideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 479.98px) {
   .discovery-header__actions {
     flex-direction: column;
     align-items: stretch;
@@ -1013,15 +1353,11 @@
   .discovery-view-tab {
     flex: 1 1 auto;
     text-align: center;
+    padding-inline: 8px;
   }
 
   .discovery-create {
     justify-content: center;
-  }
-
-  .discovery-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
   }
 
   .discovery-card {
@@ -1029,7 +1365,7 @@
   }
 
   .discovery-card__content {
-    padding: 16px;
+    padding: var(--card-padding-sm);
   }
 
   .discovery-empty,

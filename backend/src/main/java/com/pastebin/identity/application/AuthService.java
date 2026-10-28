@@ -7,6 +7,7 @@ import com.pastebin.identity.infrastructure.PasswordResetTokenRepository;
 import com.pastebin.identity.infrastructure.PastebinUserPrincipal;
 import com.pastebin.identity.infrastructure.UserRepository;
 import com.pastebin.paste.domain.DeletionCapabilityUtil;
+import com.pastebin.shared.errors.BadRequestException;
 import com.pastebin.shared.errors.ConflictException;
 import com.pastebin.shared.errors.ForbiddenException;
 import com.pastebin.shared.errors.UnauthorizedException;
@@ -38,13 +39,16 @@ import java.time.temporal.ChronoUnit;
 import org.springframework.beans.factory.annotation.Value;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 public class AuthService {
@@ -53,6 +57,16 @@ public class AuthService {
 
     /** Bounded so a pathological username collision cannot spin; three is ample in practice. */
     private static final int PROVISION_ATTEMPTS = 3;
+
+    /** GitHub usernames are 1-39 characters and may not start or end with a hyphen. */
+    private static final Pattern GITHUB_HANDLE_PATTERN =
+            Pattern.compile("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$");
+
+    /** LinkedIn public profile slugs are conservative ASCII identifiers. */
+    private static final Pattern LINKEDIN_SLUG_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,100}$");
+
+    /** X/Twitter handles are 1-15 letters, digits, or underscores. */
+    private static final Pattern X_HANDLE_PATTERN = Pattern.compile("^[A-Za-z0-9_]{1,15}$");
 
     @Value("${supabase.url:}")
     private String supabaseUrl;
@@ -272,6 +286,28 @@ public class AuthService {
         return toUserResponse(user);
     }
 
+    /**
+     * Replaces the caller's public profile fields. The request is a full replacement: a
+     * missing or blank value clears that field. Social links are normalized to canonical
+     * HTTPS profile URLs so the public projection never contains a client-supplied scheme
+     * or host.
+     */
+    @Transactional
+    public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Authentication required"));
+
+        user.setDisplayName(normalizeText(request.displayName(), 80, "Display name"));
+        user.setBio(normalizeBio(request.bio()));
+        user.setAvatarUrl(normalizeAvatarUrl(request.avatarUrl()));
+        user.setGithubUrl(normalizeGithubUrl(request.githubUrl()));
+        user.setLinkedinUrl(normalizeLinkedinUrl(request.linkedinUrl()));
+        user.setXUrl(normalizeXUrl(request.xUrl()));
+
+        userRepository.save(user);
+        return toUserResponse(user);
+    }
+
     public UserResponse toUserResponse(User user) {
         return new UserResponse(
                 user.getId(),
@@ -279,8 +315,201 @@ public class AuthService {
                 user.getEmail(),
                 user.getRole(),
                 user.isEmailVerified(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getDisplayName(),
+                user.getBio(),
+                user.getAvatarUrl(),
+                user.getGithubUrl(),
+                user.getLinkedinUrl(),
+                user.getXUrl()
         );
+    }
+
+    // --------------------------------------------------------------- profile helpers
+
+    private String normalizeText(String value, int maxLength, String label) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.length() > maxLength) {
+            throw new BadRequestException(label + " must be at most " + maxLength + " characters.");
+        }
+        return trimmed;
+    }
+
+    private String normalizeBio(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.replace("\r\n", "\n").replace('\r', '\n').trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.length() > 500) {
+            throw new BadRequestException("Bio must be at most 500 characters.");
+        }
+        return normalized;
+    }
+
+    private String normalizeAvatarUrl(String value) {
+        String trimmed = normalizeText(value, 500, "Avatar URL");
+        if (trimmed == null) {
+            return null;
+        }
+        URI uri = parseHttpUri(trimmed, "Avatar URL");
+        return uri.toString();
+    }
+
+    private String normalizeGithubUrl(String value) {
+        String trimmed = normalizeText(value, 255, "GitHub link");
+        if (trimmed == null) {
+            return null;
+        }
+
+        String handle;
+        if (looksLikeUrl(trimmed)) {
+            URI uri = parseSocialUri(trimmed, "GitHub link");
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            if (!host.equals("github.com") && !host.equals("www.github.com")) {
+                throw new BadRequestException("GitHub link must point to github.com.");
+            }
+            handle = firstPathSegment(uri.getPath());
+            if (handle == null) {
+                throw new BadRequestException("GitHub link must include a username.");
+            }
+        } else {
+            handle = stripLeadingAt(trimmed);
+        }
+
+        if (!GITHUB_HANDLE_PATTERN.matcher(handle).matches()) {
+            throw new BadRequestException("GitHub username is not valid.");
+        }
+        return "https://github.com/" + handle;
+    }
+
+    private String normalizeLinkedinUrl(String value) {
+        String trimmed = normalizeText(value, 255, "LinkedIn link");
+        if (trimmed == null) {
+            return null;
+        }
+
+        String slug;
+        if (looksLikeUrl(trimmed)) {
+            URI uri = parseSocialUri(trimmed, "LinkedIn link");
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            if (!host.equals("linkedin.com") && !host.endsWith(".linkedin.com")) {
+                throw new BadRequestException("LinkedIn link must point to linkedin.com.");
+            }
+            slug = linkedinSlug(uri.getPath());
+            if (slug == null) {
+                throw new BadRequestException("LinkedIn link must be a /in/ profile URL.");
+            }
+        } else {
+            slug = stripLeadingAt(trimmed);
+        }
+
+        if (!LINKEDIN_SLUG_PATTERN.matcher(slug).matches()) {
+            throw new BadRequestException("LinkedIn profile name is not valid.");
+        }
+        return "https://www.linkedin.com/in/" + slug;
+    }
+
+    private String normalizeXUrl(String value) {
+        String trimmed = normalizeText(value, 255, "X link");
+        if (trimmed == null) {
+            return null;
+        }
+
+        String handle;
+        if (looksLikeUrl(trimmed)) {
+            URI uri = parseSocialUri(trimmed, "X link");
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            if (!isXHost(host)) {
+                throw new BadRequestException("X link must point to x.com or twitter.com.");
+            }
+            handle = firstPathSegment(uri.getPath());
+            if (handle == null) {
+                throw new BadRequestException("X link must include a username.");
+            }
+        } else {
+            handle = stripLeadingAt(trimmed);
+        }
+
+        if (!X_HANDLE_PATTERN.matcher(handle).matches()) {
+            throw new BadRequestException("X username is not valid.");
+        }
+        return "https://x.com/" + handle;
+    }
+
+    private URI parseSocialUri(String value, String label) {
+        String candidate = value.contains("://") ? value : "https://" + value;
+        return parseHttpUri(candidate, label);
+    }
+
+    private URI parseHttpUri(String value, String label) {
+        try {
+            URI uri = new URI(value);
+            String scheme = uri.getScheme();
+            if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+                throw new BadRequestException(label + " must use http:// or https://.");
+            }
+            if (uri.getHost() == null || uri.getHost().isBlank()) {
+                throw new BadRequestException(label + " must be a valid URL with a host.");
+            }
+            if (uri.getUserInfo() != null) {
+                throw new BadRequestException(label + " must not contain credentials.");
+            }
+            return uri;
+        } catch (URISyntaxException ex) {
+            throw new BadRequestException(label + " must be a valid URL.");
+        }
+    }
+
+    private boolean looksLikeUrl(String value) {
+        return value.contains("://") || value.contains("/") || value.contains(".");
+    }
+
+    private String stripLeadingAt(String value) {
+        return value.startsWith("@") ? value.substring(1) : value;
+    }
+
+    private String firstPathSegment(String path) {
+        if (path == null) {
+            return null;
+        }
+        String cleaned = path;
+        while (cleaned.startsWith("/")) {
+            cleaned = cleaned.substring(1);
+        }
+        if (cleaned.isEmpty()) {
+            return null;
+        }
+        int slash = cleaned.indexOf('/');
+        String segment = slash >= 0 ? cleaned.substring(0, slash) : cleaned;
+        return segment.isBlank() ? null : segment;
+    }
+
+    private String linkedinSlug(String path) {
+        if (path == null) {
+            return null;
+        }
+        String[] segments = path.split("/");
+        for (int i = 0; i < segments.length - 1; i++) {
+            if ("in".equalsIgnoreCase(segments[i])) {
+                String candidate = segments[i + 1];
+                return candidate.isBlank() ? null : candidate;
+            }
+        }
+        return null;
+    }
+
+    private boolean isXHost(String host) {
+        return host.equals("x.com") || host.endsWith(".x.com")
+                || host.equals("twitter.com") || host.endsWith(".twitter.com");
     }
 
     /**
@@ -375,6 +604,14 @@ public class AuthService {
         SupabaseIdentity identity = verifySupabaseAccessToken(accessToken);
 
         User user = provisionLocalUser(identity.email(), identity.username());
+
+        // Capture a verified OAuth avatar once, but never replace an avatar the user has
+        // already configured (or one captured on an earlier login).
+        if (identity.avatarUrl() != null
+                && (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank())) {
+            user.setAvatarUrl(identity.avatarUrl());
+            user = userRepository.save(user);
+        }
 
         PastebinUserPrincipal principal = new PastebinUserPrincipal(user);
         Authentication auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
@@ -529,7 +766,10 @@ public class AuthService {
                 throw new UnauthorizedException("Supabase access token verification failed.");
             }
 
-            return new SupabaseIdentity(email.toLowerCase().trim(), resolveSupabaseUsername(node));
+            return new SupabaseIdentity(
+                    email.toLowerCase().trim(),
+                    resolveSupabaseUsername(node),
+                    resolveSupabaseAvatar(node));
         } catch (UnauthorizedException e) {
             throw e;
         } catch (Exception e) {
@@ -549,7 +789,37 @@ public class AuthService {
         return null;
     }
 
-    private record SupabaseIdentity(String email, String username) {}
+    /**
+     * OAuth providers put the avatar in different claims: GitHub uses
+     * {@code user_metadata.avatar_url}, Google uses {@code user_metadata.picture}, and
+     * some Supabase responses expose a top-level {@code avatar_url}. Only safe HTTP(S)
+     * URLs are accepted; anything else is ignored rather than failing the login.
+     */
+    private String resolveSupabaseAvatar(com.fasterxml.jackson.databind.JsonNode node) {
+        com.fasterxml.jackson.databind.JsonNode metadata = node.path("user_metadata");
+        for (String key : new String[]{"avatar_url", "picture"}) {
+            String candidate = metadata.path(key).asText(null);
+            String safe = safeAvatarUrl(candidate);
+            if (safe != null) {
+                return safe;
+            }
+        }
+        return safeAvatarUrl(node.path("avatar_url").asText(null));
+    }
+
+    private String safeAvatarUrl(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+        try {
+            return normalizeAvatarUrl(candidate);
+        } catch (BadRequestException ex) {
+            log.debug("Ignoring invalid OAuth avatar URL from Supabase identity");
+            return null;
+        }
+    }
+
+    private record SupabaseIdentity(String email, String username, String avatarUrl) {}
 
     private String resolveUniqueUsername(String base) {
         String candidate = base.replaceAll("[^a-zA-Z0-9_-]", "_");

@@ -2,7 +2,6 @@ package com.pastebin.paste.infrastructure;
 
 import com.pastebin.paste.domain.ActivityEventType;
 import com.pastebin.paste.domain.PasteActivityEvent;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -10,10 +9,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
-import java.util.List;
 
 @Repository
-public interface PasteActivityEventRepository extends JpaRepository<PasteActivityEvent, Long> {
+public interface PasteActivityEventRepository extends JpaRepository<PasteActivityEvent, Long>, TrendingRankingRepository {
 
     @Query("SELECT COUNT(pae) > 0 FROM PasteActivityEvent pae " +
            "WHERE pae.paste.id = :pasteId " +
@@ -35,27 +33,8 @@ public interface PasteActivityEventRepository extends JpaRepository<PasteActivit
                                  @Param("clientIpHash") String clientIpHash,
                                  @Param("since") Instant since);
 
-    @Query("SELECT pae.paste.id, " +
-           "SUM(CASE WHEN pae.eventType = com.pastebin.paste.domain.ActivityEventType.VIEW THEN 1.0 " +
-           "         WHEN pae.eventType = com.pastebin.paste.domain.ActivityEventType.UPVOTE THEN 2.0 " +
-           "         WHEN pae.eventType = com.pastebin.paste.domain.ActivityEventType.STAR THEN 3.0 " +
-           "         ELSE 0.0 END) as score " +
-           "FROM PasteActivityEvent pae JOIN pae.paste p " +
-           "WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE + " " +
-           "AND pae.createdAt >= :windowStart " +
-           "AND (:language IS NULL OR p.language = :language) " +
-           "GROUP BY pae.paste.id " +
-           "ORDER BY score DESC, pae.paste.id ASC")
-    List<Object[]> findTrendingPasteIdsAndScores(@Param("now") Instant now,
-                                                 @Param("windowStart") Instant windowStart,
-                                                 @Param("language") String language,
-                                                 Pageable pageable);
-
-    @Query("SELECT COUNT(DISTINCT pae.paste.id) " +
-           "FROM PasteActivityEvent pae JOIN pae.paste p " +
-           "WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE + " " +
-           "AND pae.createdAt >= :windowStart " +
-           "AND (:language IS NULL OR p.language = :language)")
+    @Query("SELECT COUNT(p) FROM Paste p WHERE " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND :windowStart <= :now AND (:language IS NULL OR p.language = :language)")
     long countTrendingEligiblePastes(@Param("now") Instant now,
                                      @Param("windowStart") Instant windowStart,
                                      @Param("language") String language);
@@ -65,8 +44,8 @@ public interface PasteActivityEventRepository extends JpaRepository<PasteActivit
     int deleteEventsOlderThan(@Param("cutoff") Instant cutoff);
 
     @Modifying
-    @Query("DELETE FROM PasteActivityEvent pae WHERE pae.paste.id = :pasteId AND pae.userId = :userId AND pae.eventType = :eventType")
-    int deleteUserEvents(@Param("pasteId") Long pasteId, @Param("userId") Long userId, @Param("eventType") ActivityEventType eventType);
+    @Query("UPDATE PasteActivityEvent pae SET pae.active = false WHERE pae.paste.id = :pasteId AND pae.userId = :userId AND pae.eventType = :eventType")
+    int revokeUserEvents(@Param("pasteId") Long pasteId, @Param("userId") Long userId, @Param("eventType") ActivityEventType eventType);
 
     @Modifying
     @Query("DELETE FROM PasteActivityEvent pae WHERE pae.paste.id = :pasteId")
@@ -77,6 +56,14 @@ public interface PasteActivityEventRepository extends JpaRepository<PasteActivit
     int deleteByPasteIds(@Param("pasteIds") java.util.Collection<Long> pasteIds);
 
     @Modifying
-    @Query("DELETE FROM PasteActivityEvent pae WHERE pae.paste.id = :pasteId AND pae.clientIpHash = :clientIpHash AND pae.eventType = :eventType")
-    int deleteIpEvents(@Param("pasteId") Long pasteId, @Param("clientIpHash") String clientIpHash, @Param("eventType") ActivityEventType eventType);
+    @Query("UPDATE PasteActivityEvent pae SET pae.active = false WHERE pae.paste.id = :pasteId AND pae.clientIpHash = :clientIpHash AND pae.eventType = :eventType")
+    int revokeIpEvents(@Param("pasteId") Long pasteId, @Param("clientIpHash") String clientIpHash, @Param("eventType") ActivityEventType eventType);
+
+    @Modifying
+    @Query(value = "INSERT INTO paste_activity_events (paste_id, event_type, user_id, client_ip_hash, source_comment_id, source_reply_id, created_at, view_bucket) "
+            + "VALUES (:pasteId, :type, :userId, :ipHash, :commentId, :replyId, :occurredAt, :bucket) ON CONFLICT DO NOTHING", nativeQuery = true)
+    int insertIfAbsent(@Param("pasteId") Long pasteId, @Param("type") String type,
+                       @Param("userId") Long userId, @Param("ipHash") String ipHash,
+                       @Param("commentId") Long commentId, @Param("replyId") Long replyId,
+                       @Param("occurredAt") Instant occurredAt, @Param("bucket") Long bucket);
 }

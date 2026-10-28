@@ -67,10 +67,10 @@ export const RegisterPage: React.FC = () => {
   return (
     <div className="workspace max-w-lg mx-auto py-12">
       <div className="workspace-heading text-center flex-col items-center justify-center">
-        <div className="eyebrow mx-auto">
+        <div className="eyebrow mx-auto justify-center">
           <span></span> NEW ACCOUNT
         </div>
-        <h1 className="workbench-title text-center text-4xl sm:text-5xl mt-3">
+        <h1 className="workbench-title mt-3 text-center text-3xl sm:text-4xl">
           Join extraBin.
         </h1>
         <p className="text-center mt-2">
@@ -78,7 +78,7 @@ export const RegisterPage: React.FC = () => {
         </p>
       </div>
 
-      <div className="paper-card p-8 mt-6">
+      <div className="auth-card paper-card mt-6 p-8">
         {errorMessage && (
           <div className="mb-5 p-3 rounded-lg bg-red-100 border border-red-800 text-red-900 text-xs font-mono font-semibold flex items-center justify-between">
             <span>{errorMessage}</span>

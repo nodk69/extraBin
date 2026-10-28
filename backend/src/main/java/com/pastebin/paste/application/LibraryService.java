@@ -210,6 +210,49 @@ public class LibraryService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public com.pastebin.paste.api.dto.AccountStatsResponse getAccountStats(Long userId) {
+        if (userId == null) {
+            throw new ForbiddenException("Authentication required.");
+        }
+        Instant now = Instant.now();
+        List<Object[]> visibilityCounts = pasteRepository.countActiveUserPastesByVisibility(userId, now);
+        long publicCount = 0;
+        long unlistedCount = 0;
+        long privateCount = 0;
+        for (Object[] row : visibilityCounts) {
+            com.pastebin.paste.domain.Visibility vis = (com.pastebin.paste.domain.Visibility) row[0];
+            long count = ((Number) row[1]).longValue();
+            if (vis == com.pastebin.paste.domain.Visibility.PUBLIC) {
+                publicCount = count;
+            } else if (vis == com.pastebin.paste.domain.Visibility.UNLISTED) {
+                unlistedCount = count;
+            } else if (vis == com.pastebin.paste.domain.Visibility.PRIVATE) {
+                privateCount = count;
+            }
+        }
+
+        List<Object[]> summary = pasteRepository.countActiveUserPastesSummary(userId, now);
+        long totalPastes = 0;
+        long totalLines = 0;
+        long totalViews = 0;
+        if (!summary.isEmpty()) {
+            Object[] row = summary.get(0);
+            totalPastes = ((Number) row[0]).longValue();
+            totalLines = ((Number) row[1]).longValue();
+            totalViews = ((Number) row[2]).longValue();
+        }
+
+        return new com.pastebin.paste.api.dto.AccountStatsResponse(
+                totalPastes,
+                publicCount,
+                unlistedCount,
+                privateCount,
+                totalLines,
+                totalViews
+        );
+    }
+
     private PasteSummaryResponse toSummary(Paste paste) {
         Long folderId = paste.getFolder() != null ? paste.getFolder().getId() : null;
         String folderName = paste.getFolder() != null ? paste.getFolder().getName() : null;

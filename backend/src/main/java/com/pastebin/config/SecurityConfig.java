@@ -98,7 +98,7 @@ public class SecurityConfig {
                 .xssProtection(xss -> xss.disable()) // Superseded by modern CSP
                 .referrerPolicy(ref -> ref.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
                 .contentSecurityPolicy(csp -> csp
-                    .policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline' https://storage.ko-fi.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://storage.ko-fi.com https://ko-fi.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://ko-fi.com https://storage.ko-fi.com; frame-src 'self' https://ko-fi.com; frame-ancestors 'none'; form-action 'self' https://ko-fi.com; base-uri 'self'; object-src 'none';")
+                    .policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline' https://storage.ko-fi.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://ko-fi.com https://storage.ko-fi.com; frame-src 'self' https://ko-fi.com; frame-ancestors 'none'; form-action 'self' https://ko-fi.com; base-uri 'self'; object-src 'none';")
                 )
             )
             .authorizeHttpRequests(auth -> auth
@@ -117,6 +117,11 @@ public class SecurityConfig {
 
                 // ── Public: auth endpoints ─────────────────────────────────
                 .requestMatchers("/api/v1/auth/**").permitAll()
+
+                // ── Authenticated follow mutations; public author reads remain open ──
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/discovery/authors/following/feed").authenticated()
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/discovery/authors/*/follow").authenticated()
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/v1/discovery/authors/*/follow").authenticated()
 
                 // ── Public: discovery & author profiles ────────────────────
                 .requestMatchers("/api/v1/discovery/**").permitAll()

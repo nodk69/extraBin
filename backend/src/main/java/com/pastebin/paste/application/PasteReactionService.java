@@ -42,6 +42,7 @@ public class PasteReactionService {
     private final com.pastebin.paste.infrastructure.PasteActivityEventRepository pasteActivityEventRepository;
     private final PasteService pasteService;
     private final RateLimiterService rateLimiterService;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     @Value("${pastebin.security.vote-pepper:}")
     private String configuredPepper;
@@ -63,7 +64,8 @@ public class PasteReactionService {
             RateLimiterService rateLimiterService,
             com.pastebin.paste.infrastructure.TagRepository tagRepository,
             com.pastebin.paste.infrastructure.PasteViewHistoryRepository pasteViewHistoryRepository,
-            com.pastebin.paste.infrastructure.PasteActivityEventRepository pasteActivityEventRepository
+            com.pastebin.paste.infrastructure.PasteActivityEventRepository pasteActivityEventRepository,
+            org.springframework.context.ApplicationEventPublisher events
     ) {
         this.pasteRepository = pasteRepository;
         this.pasteCommentRepository = pasteCommentRepository;
@@ -77,6 +79,7 @@ public class PasteReactionService {
         this.tagRepository = tagRepository;
         this.pasteViewHistoryRepository = pasteViewHistoryRepository;
         this.pasteActivityEventRepository = pasteActivityEventRepository;
+        this.events = events;
     }
 
     @PostConstruct
@@ -157,15 +160,16 @@ public class PasteReactionService {
                 pasteRepository.toggleUpToDown(lockedPaste.getId());
                 // Remove UPVOTE event from trending activity ledger
                 if (userId != null) {
-                    pasteActivityEventRepository.deleteUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                    pasteActivityEventRepository.revokeUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
                 } else {
-                    pasteActivityEventRepository.deleteIpEvents(lockedPaste.getId(), ipHash, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                    pasteActivityEventRepository.revokeIpEvents(lockedPaste.getId(), ipHash, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
                 }
             } else {
                 pasteRepository.toggleDownToUp(lockedPaste.getId());
                 // Record UPVOTE event in trending activity ledger if eligible
                 if (lockedPaste.getVisibility() == com.pastebin.paste.domain.Visibility.PUBLIC
-                        && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null) {
+                        && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null
+                        && (userId == null || !userId.equals(lockedPaste.getUserId()))) {
                     pasteActivityEventRepository.save(new com.pastebin.paste.domain.PasteActivityEvent(
                             lockedPaste, com.pastebin.paste.domain.ActivityEventType.UPVOTE, userId, ipHash));
                 }
@@ -179,7 +183,8 @@ public class PasteReactionService {
             if (targetType == VoteType.UP) {
                 pasteRepository.incrementUpvotes(lockedPaste.getId());
                 if (lockedPaste.getVisibility() == com.pastebin.paste.domain.Visibility.PUBLIC
-                        && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null) {
+                        && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null
+                        && (userId == null || !userId.equals(lockedPaste.getUserId()))) {
                     pasteActivityEventRepository.save(new com.pastebin.paste.domain.PasteActivityEvent(
                             lockedPaste, com.pastebin.paste.domain.ActivityEventType.UPVOTE, userId, ipHash));
                 }
@@ -188,12 +193,14 @@ public class PasteReactionService {
             }
         }
 
+        events.publishEvent(new PublicListingChangedEvent());
         Paste fresh = pasteRepository.findById(lockedPaste.getId()).orElse(lockedPaste);
         return new PasteVoteResponse(publicId, fresh.getUpvotes(), fresh.getDownvotes(), targetType);
     }
 
     @Transactional
     public PasteVoteResponse retractPasteVote(String publicId, Long userId, String password, String clientIp, String shareToken) {
+        checkRateLimit(userId, clientIp, "vote");
         Paste paste = verifyPasteAccessForReaction(publicId, userId, password, clientIp, shareToken);
 
         Paste lockedPaste = pasteRepository.findByIdForUpdate(paste.getId())
@@ -209,14 +216,15 @@ public class PasteReactionService {
             if (existing.getVoteType() == VoteType.UP) {
                 pasteRepository.decrementUpvotes(lockedPaste.getId());
                 if (userId != null) {
-                    pasteActivityEventRepository.deleteUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                    pasteActivityEventRepository.revokeUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
                 } else {
-                    pasteActivityEventRepository.deleteIpEvents(lockedPaste.getId(), ipHash, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
+                    pasteActivityEventRepository.revokeIpEvents(lockedPaste.getId(), ipHash, com.pastebin.paste.domain.ActivityEventType.UPVOTE);
                 }
             } else {
                 pasteRepository.decrementDownvotes(lockedPaste.getId());
             }
             pasteVoteRepository.delete(existing);
+            events.publishEvent(new PublicListingChangedEvent());
         }
 
         Paste fresh = pasteRepository.findById(lockedPaste.getId()).orElse(lockedPaste);
@@ -242,10 +250,12 @@ public class PasteReactionService {
             pasteStarRepository.save(new PasteStar(lockedPaste, userId));
             pasteRepository.incrementStars(lockedPaste.getId());
             if (lockedPaste.getVisibility() == com.pastebin.paste.domain.Visibility.PUBLIC
-                    && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null) {
+                    && !lockedPaste.isBurnAfterReading() && lockedPaste.getPasswordHash() == null && lockedPaste.getEncryptionMode() == null
+                        && (userId == null || !userId.equals(lockedPaste.getUserId()))) {
                 pasteActivityEventRepository.save(new com.pastebin.paste.domain.PasteActivityEvent(
                         lockedPaste, com.pastebin.paste.domain.ActivityEventType.STAR, userId, null));
             }
+            events.publishEvent(new PublicListingChangedEvent());
         }
 
         Paste fresh = pasteRepository.findById(lockedPaste.getId()).orElse(lockedPaste);
@@ -257,6 +267,7 @@ public class PasteReactionService {
         if (userId == null) {
             throw new org.springframework.security.authentication.InsufficientAuthenticationException("Sign in required");
         }
+        rateLimiterService.checkRateLimit("star:user:" + userId, 30, 60);
         Paste paste = verifyPasteAccessForReaction(publicId, userId, password, clientIp, shareToken);
         Paste lockedPaste = pasteRepository.findByIdForUpdate(paste.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
@@ -265,7 +276,8 @@ public class PasteReactionService {
         if (starOpt.isPresent()) {
             pasteStarRepository.delete(starOpt.get());
             pasteRepository.decrementStars(lockedPaste.getId());
-            pasteActivityEventRepository.deleteUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.STAR);
+            pasteActivityEventRepository.revokeUserEvents(lockedPaste.getId(), userId, com.pastebin.paste.domain.ActivityEventType.STAR);
+            events.publishEvent(new PublicListingChangedEvent());
         }
 
         Paste fresh = pasteRepository.findById(lockedPaste.getId()).orElse(lockedPaste);

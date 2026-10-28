@@ -25,6 +25,11 @@ public final class PasteQueries {
             " AND p.encryptionMode IS NULL" +
             " AND p.moderationState = com.pastebin.paste.domain.ModerationState.ACTIVE";
 
+    public static final String ELIGIBLE_PUBLIC_SQL_PREDICATE =
+            "p.visibility = 'PUBLIC' AND (p.expires_at IS NULL OR p.expires_at > :now)"
+            + " AND p.burn_after_reading = false AND p.password_hash IS NULL"
+            + " AND p.encryption_mode IS NULL AND p.moderation_state = 'ACTIVE'";
+
     private PasteQueries() {
     }
 }

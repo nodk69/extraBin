@@ -50,7 +50,7 @@ public class DiscoveryController {
                     + "Search and tag requests are rate limited per client IP.")
     public ResponseEntity<PagedResponse<PasteSummaryResponse>> getDiscoveryFeed(
             @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "size", defaultValue = com.pastebin.discovery.application.DiscoveryPagination.DEFAULT_PAGE_SIZE) int size,
             @RequestParam(name = "language", required = false) String language,
             @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "tag", required = false) String tag,
@@ -66,7 +66,7 @@ public class DiscoveryController {
         }
 
         int boundedPage = Math.max(0, page);
-        int boundedSize = Math.min(Math.max(1, size), 50);
+        int boundedSize = com.pastebin.discovery.application.DiscoveryPagination.clampSize(size);
         PagedResponse<PasteSummaryResponse> response =
                 discoveryService.getPublicPastes(language, q, tag, window, sort, boundedPage, boundedSize);
         return ResponseEntity.ok(response);
@@ -84,11 +84,11 @@ public class DiscoveryController {
             description = "Returns eligible public pastes ordered by distinct save count DESC (ties by id ASC). Zero-save pastes are never included.")
     public ResponseEntity<PagedResponse<PasteSummaryResponse>> getMostSaved(
             @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "size", defaultValue = com.pastebin.discovery.application.DiscoveryPagination.DEFAULT_PAGE_SIZE) int size,
             @RequestParam(name = "language", required = false) String language
     ) {
         int boundedPage = Math.max(0, page);
-        int boundedSize = Math.min(Math.max(1, size), 50);
+        int boundedSize = com.pastebin.discovery.application.DiscoveryPagination.clampSize(size);
         PagedResponse<PasteSummaryResponse> response =
                 discoveryService.getMostSaved(language, boundedPage, boundedSize);
         return ResponseEntity.ok(response);
@@ -102,7 +102,7 @@ public class DiscoveryController {
             @RequestParam(name = "window", defaultValue = "24h") String window,
             @RequestParam(name = "language", required = false) String language,
             @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "size", defaultValue = com.pastebin.discovery.application.DiscoveryPagination.DEFAULT_PAGE_SIZE) int size,
             HttpServletRequest request
     ) {
         if (window != null && !window.isBlank() && !Set.of("24h", "7d", "30d").contains(window.toLowerCase(Locale.ROOT))) {
@@ -113,7 +113,7 @@ public class DiscoveryController {
         rateLimiterService.checkRateLimit("discovery-trending:ip:" + clientIp, 60, 60);
 
         int boundedPage = Math.max(0, page);
-        int boundedSize = Math.min(Math.max(1, size), 50);
+        int boundedSize = com.pastebin.discovery.application.DiscoveryPagination.clampSize(size);
         PagedResponse<PasteSummaryResponse> response =
                 discoveryService.getTrending(window, language, boundedPage, boundedSize);
         return ResponseEntity.ok(response);

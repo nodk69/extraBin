@@ -8,5 +8,11 @@ public record UserResponse(
         String email,
         String role,
         boolean emailVerified,
-        Instant createdAt
+        Instant createdAt,
+        String displayName,
+        String bio,
+        String avatarUrl,
+        String githubUrl,
+        String linkedinUrl,
+        String xUrl
 ) {}

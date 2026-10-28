@@ -699,7 +699,7 @@ export const DocsPage: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5 text-[#ff5c3d]" />
             <span>EXTRABIN PLATFORM DOCUMENTATION HUB</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-mono font-bold text-[#17201d] tracking-tight m-0">
+          <h1 className="m-0 font-mono text-2xl font-bold tracking-tight text-[#17201d] sm:text-4xl">
             ExtraBin Documentation &amp; Feature Guides
           </h1>
           <p className="text-xs sm:text-sm font-mono text-[#525a54] max-w-3xl m-0 leading-relaxed">
@@ -709,7 +709,7 @@ export const DocsPage: React.FC = () => {
 
         {/* Fast Link Bar to the dedicated guides */}
         <div className="flex flex-wrap items-center gap-2 pt-2">
-          <span className="text-xs font-mono text-[#74786f]">Dedicated guides:</span>
+          <span className="w-full text-xs font-mono text-[#74786f]">Dedicated guides:</span>
           <Link
             to="/docs/features/encrypted-pastes"
             className="px-2.5 py-1 rounded-md bg-[#ebe7dc] hover:bg-[#ddd7ca] border border-[#d5d0c5] text-xs font-mono font-bold text-[#17201d] transition-colors no-underline flex items-center gap-1"

@@ -37,12 +37,12 @@ export const DeletionCapabilityModal: React.FC<DeletionCapabilityModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="modal-backdrop">
       <div 
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-slate-900 p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+        className="modal-paper border-amber-500/30 bg-slate-900 text-white shadow-2xl"
       >
         <div className="flex items-start gap-4">
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">

@@ -1,107 +1,68 @@
 package com.pastebin.discovery.application;
 
 import com.pastebin.paste.application.PasteReactionService;
+import com.pastebin.paste.application.PublicListingChangedEvent;
 import com.pastebin.paste.domain.ActivityEventType;
 import com.pastebin.paste.domain.Paste;
-import com.pastebin.paste.domain.PasteActivityEvent;
+import com.pastebin.paste.domain.PasteComment;
+import com.pastebin.paste.domain.Reply;
 import com.pastebin.paste.infrastructure.PasteActivityEventRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.time.Duration;
+import java.time.Instant;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
-import java.time.Instant;
-
-/**
- * Ingests genuine user engagement events (views, stars, upvotes) for trending calculations.
- * Applies deduplication sliding windows (e.g., 10 minutes per IP/user for views)
- * to prevent reload spam, refresh bot attacks, and artificial score inflation.
- * Non-blocking, isolated transaction propagation ensures activity logging never breaks paste reads.
- */
 @Service
 public class PasteActivityIngestionService {
-
-    private static final Logger log = LoggerFactory.getLogger(PasteActivityIngestionService.class);
     private static final Duration VIEW_DEDUP_WINDOW = Duration.ofMinutes(10);
-
     private final PasteActivityEventRepository activityEventRepository;
     private final PasteReactionService pasteReactionService;
+    private final ApplicationEventPublisher events;
+    private final TrendingPolicy policy;
 
     public PasteActivityIngestionService(PasteActivityEventRepository activityEventRepository,
-                                         PasteReactionService pasteReactionService) {
+                                         PasteReactionService pasteReactionService,
+                                         ApplicationEventPublisher events, TrendingPolicy policy) {
         this.activityEventRepository = activityEventRepository;
         this.pasteReactionService = pasteReactionService;
+        this.events = events;
+        this.policy = policy;
     }
 
-    /**
-     * Records an eligible view event with deduplication.
-     * Only public pastes with active moderation and non-expired status receive trending events.
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordViewEvent(Paste paste, Long userId, String clientIp) {
-        try {
-            if (paste == null || paste.getVisibility() != com.pastebin.paste.domain.Visibility.PUBLIC
-                    || paste.isBurnAfterReading() || paste.getPasswordHash() != null || paste.getEncryptionMode() != null) {
-                return;
-            }
-
-            Instant cutoff = Instant.now().minus(VIEW_DEDUP_WINDOW);
-
-            if (userId != null) {
-                if (activityEventRepository.existsRecentByUserId(paste.getId(), ActivityEventType.VIEW, userId, cutoff)) {
-                    return; // Deduplicated
-                }
-                activityEventRepository.save(new PasteActivityEvent(paste, ActivityEventType.VIEW, userId, null));
-            } else {
-                String ipHash = pasteReactionService.computeIpHash(clientIp);
-                if (activityEventRepository.existsRecentByIpHash(paste.getId(), ActivityEventType.VIEW, ipHash, cutoff)) {
-                    return; // Deduplicated
-                }
-                activityEventRepository.save(new PasteActivityEvent(paste, ActivityEventType.VIEW, null, ipHash));
-            }
-        } catch (Exception e) {
-            log.warn("Failed to record view activity event for paste id {}: {}", paste.getId(), e.getMessage());
-        }
+        Instant now = policy.now();
+        if (!eligibleActor(paste, userId, now)) return;
+        Instant cutoff = now.minus(VIEW_DEDUP_WINDOW);
+        String ipHash = userId == null ? pasteReactionService.computeIpHash(clientIp) : null;
+        boolean recent = userId == null
+                ? activityEventRepository.existsRecentByIpHash(paste.getId(), ActivityEventType.VIEW, ipHash, cutoff)
+                : activityEventRepository.existsRecentByUserId(paste.getId(), ActivityEventType.VIEW, userId, cutoff);
+        if (recent) return;
+        activityEventRepository.insertIfAbsent(paste.getId(), "VIEW", userId, ipHash,
+                null, null, now, Math.floorDiv(now.getEpochSecond(), VIEW_DEDUP_WINDOW.toSeconds()));
     }
 
-    /**
-     * Records a star engagement event.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordStarEvent(Paste paste, Long userId) {
-        try {
-            if (paste == null || paste.getVisibility() != com.pastebin.paste.domain.Visibility.PUBLIC
-                    || paste.isBurnAfterReading() || paste.getPasswordHash() != null || paste.getEncryptionMode() != null) {
-                return;
-            }
-            if (userId != null) {
-                activityEventRepository.save(new PasteActivityEvent(paste, ActivityEventType.STAR, userId, null));
-            }
-        } catch (Exception e) {
-            log.warn("Failed to record star activity event for paste id {}: {}", paste.getId(), e.getMessage());
-        }
+    @Transactional
+    public void recordCommentEvent(PasteComment comment) {
+        if (comment.getUserId() == null || !eligibleActor(comment.getPaste(), comment.getUserId(), policy.now())) return;
+        int inserted = activityEventRepository.insertIfAbsent(comment.getPaste().getId(), "COMMENT", comment.getUserId(),
+                null, comment.getId(), null, comment.getCreatedAt(), null);
+        if (inserted > 0) events.publishEvent(new PublicListingChangedEvent());
     }
 
-    /**
-     * Records an upvote engagement event.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordUpvoteEvent(Paste paste, Long userId, String clientIp) {
-        try {
-            if (paste == null || paste.getVisibility() != com.pastebin.paste.domain.Visibility.PUBLIC
-                    || paste.isBurnAfterReading() || paste.getPasswordHash() != null || paste.getEncryptionMode() != null) {
-                return;
-            }
-            if (userId != null) {
-                activityEventRepository.save(new PasteActivityEvent(paste, ActivityEventType.UPVOTE, userId, null));
-            } else {
-                String ipHash = pasteReactionService.computeIpHash(clientIp);
-                activityEventRepository.save(new PasteActivityEvent(paste, ActivityEventType.UPVOTE, null, ipHash));
-            }
-        } catch (Exception e) {
-            log.warn("Failed to record upvote activity event for paste id {}: {}", paste.getId(), e.getMessage());
-        }
+    @Transactional
+    public void recordReplyEvent(Reply reply) {
+        if (!eligibleActor(reply.getPaste(), reply.getAuthor().getId(), policy.now())) return;
+        String type = reply.getParentReply() == null ? "COMMENT" : "REPLY";
+        int inserted = activityEventRepository.insertIfAbsent(reply.getPaste().getId(), type, reply.getAuthor().getId(),
+                null, null, reply.getId(), reply.getCreatedAt(), null);
+        if (inserted > 0) events.publishEvent(new PublicListingChangedEvent());
+    }
+
+    private boolean eligibleActor(Paste paste, Long actorId, Instant now) {
+        return TrendingPolicy.isEligible(paste, now) && (actorId == null || !actorId.equals(paste.getUserId()));
     }
 }

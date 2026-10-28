@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, Eye, Globe, Lock, Share2 } from 'lucide-react';
 import type { PasteView, PasteFileItem } from '../../types/paste';
+import { TechnologyIcon } from '../../../../components/ui/TechnologyIcon';
 
 interface PasteHeaderProps {
   paste: PasteView;
@@ -21,7 +22,10 @@ export const PasteHeader: React.FC<PasteHeaderProps> = ({ paste, files, statusMe
             {paste.title || 'Untitled Paste'}
           </h1>
 
-          <span className="paper-badge">{paste.language}</span>
+          <span className="paper-badge inline-flex items-center gap-1.5">
+            <TechnologyIcon language={paste.language} title={paste.title} size={13} />
+            {paste.language}
+          </span>
 
           {paste.encryptionMode && (
             <span className="paper-badge bg-[#dcfce7] border-[#16a34a] text-[#166534]">

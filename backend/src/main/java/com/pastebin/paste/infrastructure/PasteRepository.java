@@ -93,9 +93,38 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
                                     @Param("language") String language,
                                     Pageable pageable);
 
+    @Query(value = "SELECT p FROM Paste p WHERE p.userId IN (SELECT f.id.followedId FROM UserFollow f WHERE f.id.followerId = :viewerId) AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE,
+           countQuery = "SELECT count(p) FROM Paste p WHERE p.userId IN (SELECT f.id.followedId FROM UserFollow f WHERE f.id.followerId = :viewerId) AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE)
+    Page<Paste> findEligiblePublicPastesFromFollowedUsers(@Param("viewerId") Long viewerId,
+                                                          @Param("now") Instant now,
+                                                          Pageable pageable);
+
+    // List + bounded Pageable fetches one lookahead row without a count query. Non-null cursor
+    // parameters also avoid PostgreSQL's untyped-null timestamp parameter inference pitfalls.
+    @Query("SELECT p FROM Paste p WHERE p.userId IN (SELECT f.id.followedId FROM UserFollow f WHERE f.id.followerId = :viewerId) AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND (:hasCursor = false OR p.createdAt < :cursorAt OR (p.createdAt = :cursorAt AND p.publicId < :cursorId))" +
+           " ORDER BY p.createdAt DESC, p.publicId DESC")
+    java.util.List<Paste> findEligiblePublicPastesFromFollowedUsersCursor(@Param("viewerId") Long viewerId,
+                                                                         @Param("now") Instant now,
+                                                                         @Param("hasCursor") boolean hasCursor,
+                                                                         @Param("cursorAt") Instant cursorAt,
+                                                                         @Param("cursorId") String cursorId,
+                                                                         Pageable limit);
+
     // Public author surfaces. Eligibility comes from the same shared predicate as every other
     // public surface; ownership is the persisted user_id column (never request-supplied identity).
-    // Sorting is supplied via validated Pageable; callers always append publicId ASC as the tie-break.
+    @Query(value = "SELECT DISTINCT p FROM Paste p LEFT JOIN p.tags t WHERE p.userId = :userId AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND (:language IS NULL OR p.language = :language)" +
+           " AND (:qSearch IS NULL OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.title AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.content AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(t.name AS text))) > 0)",
+           countQuery = "SELECT count(DISTINCT p.id) FROM Paste p LEFT JOIN p.tags t WHERE p.userId = :userId AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND (:language IS NULL OR p.language = :language)" +
+           " AND (:qSearch IS NULL OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.title AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(p.content AS text))) > 0 OR LOCATE(CAST(:qSearch AS string), LOWER(CAST(t.name AS text))) > 0)")
+    Page<Paste> findAuthorDiscoveryPastes(@Param("userId") Long userId,
+                                          @Param("now") Instant now,
+                                          @Param("language") String language,
+                                          @Param("qSearch") String qSearch,
+                                          Pageable pageable);
+
     @Query(value = "SELECT p FROM Paste p WHERE p.userId = :userId AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE,
            countQuery = "SELECT count(p) FROM Paste p WHERE p.userId = :userId AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE)
     Page<Paste> findEligiblePublicPastesByAuthor(@Param("userId") Long userId,
@@ -107,6 +136,23 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     java.util.List<Paste> findRecentEligiblePublicPastesByAuthor(@Param("userId") Long userId,
                                                                  @Param("now") Instant now,
                                                                  Pageable limit);
+
+    // Popular notes: sorted by views DESC, starsCount DESC, publicId ASC
+    @Query("SELECT p FROM Paste p WHERE p.userId = :userId AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " ORDER BY p.views DESC, p.starsCount DESC, p.publicId ASC")
+    java.util.List<Paste> findPopularEligiblePublicPastesByAuthor(@Param("userId") Long userId,
+                                                                 @Param("now") Instant now,
+                                                                 Pageable limit);
+
+    // Returns count of distinct non-empty languages used by this author
+    @Query("SELECT COUNT(DISTINCT p.language) FROM Paste p WHERE p.userId = :userId AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND p.language IS NOT NULL AND TRIM(p.language) <> ''")
+    long countDistinctLanguagesByAuthor(@Param("userId") Long userId, @Param("now") Instant now);
+
+    // Returns top languages used by this author ordered by frequency DESC
+    @Query("SELECT p.language, COUNT(p.id) FROM Paste p WHERE p.userId = :userId AND " + PasteQueries.ELIGIBLE_PUBLIC_PREDICATE +
+           " AND p.language IS NOT NULL AND TRIM(p.language) <> '' GROUP BY p.language ORDER BY COUNT(p.id) DESC, p.language ASC")
+    java.util.List<Object[]> findTopLanguagesByAuthor(@Param("userId") Long userId, @Param("now") Instant now, Pageable limit);
 
     // Returns one row: {eligible paste count, total views, total saves}. Aggregates use exactly the
     // same predicate as the listing so counts can never drift from the rows a profile can show.
@@ -133,6 +179,12 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     @Query("SELECT p FROM Paste p WHERE p.userId = :userId AND p.folder IS NULL AND (p.expiresAt IS NULL OR p.expiresAt > :now)")
     Page<Paste> findActiveUserPastesUnfiled(@Param("userId") Long userId, @Param("now") Instant now, Pageable pageable);
 
+    @Query("SELECT p.visibility, COUNT(p) FROM Paste p WHERE p.userId = :userId AND (p.expiresAt IS NULL OR p.expiresAt > :now) GROUP BY p.visibility")
+    java.util.List<Object[]> countActiveUserPastesByVisibility(@Param("userId") Long userId, @Param("now") Instant now);
+
+    @Query("SELECT COUNT(p), COALESCE(SUM(p.lineCount), 0), COALESCE(SUM(p.views), 0) FROM Paste p WHERE p.userId = :userId AND (p.expiresAt IS NULL OR p.expiresAt > :now)")
+    java.util.List<Object[]> countActiveUserPastesSummary(@Param("userId") Long userId, @Param("now") Instant now);
+
     // Unified library query: optional search (title/content, case-insensitive) and optional tag filter.
     // CAST(:search AS string) is required for PostgreSQL: a null search inside the concat expression
     // otherwise binds as JAVA_OBJECT -> bytea ("function lower(bytea) does not exist"). H2 (tests)
@@ -140,6 +192,7 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
     // Sorting is supplied via validated Pageable (whitelisted properties only).
     @Query(value = "SELECT DISTINCT p FROM Paste p LEFT JOIN p.tags t " +
            "WHERE p.userId = :userId AND (p.expiresAt IS NULL OR p.expiresAt > :now) " +
+           "AND (:visibility IS NULL OR p.visibility = :visibility) " +
            "AND (:folderId IS NULL OR p.folder.id = :folderId) " +
            "AND (:unfiled = false OR p.folder IS NULL) " +
            "AND (:tagName IS NULL OR t.name = :tagName) " +
@@ -147,6 +200,7 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
            "     OR LOWER(p.content) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))",
            countQuery = "SELECT count(DISTINCT p.id) FROM Paste p LEFT JOIN p.tags t " +
            "WHERE p.userId = :userId AND (p.expiresAt IS NULL OR p.expiresAt > :now) " +
+           "AND (:visibility IS NULL OR p.visibility = :visibility) " +
            "AND (:folderId IS NULL OR p.folder.id = :folderId) " +
            "AND (:unfiled = false OR p.folder IS NULL) " +
            "AND (:tagName IS NULL OR t.name = :tagName) " +
@@ -154,6 +208,7 @@ public interface PasteRepository extends JpaRepository<Paste, Long> {
            "     OR LOWER(p.content) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<Paste> findUserLibraryPastes(@Param("userId") Long userId,
                                       @Param("now") Instant now,
+                                      @Param("visibility") com.pastebin.paste.domain.Visibility visibility,
                                       @Param("folderId") Long folderId,
                                       @Param("unfiled") boolean unfiled,
                                       @Param("tagName") String tagName,

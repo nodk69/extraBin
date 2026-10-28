@@ -54,12 +54,12 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="embed-modal-title"
     >
-      <div className="w-full max-w-2xl rounded-2xl border-2 border-[#17201d] bg-[#faf8f2] p-6 shadow-[8px_10px_0px_#17201d] space-y-4 max-h-[90vh] overflow-y-auto">
+      <div className="modal-paper modal-wide">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#d5d0c5] pb-3">
           <div className="flex items-center gap-2.5">

@@ -35,6 +35,8 @@ import com.pastebin.paste.domain.ShareAccessState;
 import com.pastebin.paste.domain.ShareTokenUtil;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -53,6 +55,8 @@ import java.util.zip.ZipOutputStream;
 
 @Service
 public class PasteService {
+
+    private static final Logger log = LoggerFactory.getLogger(PasteService.class);
 
     public static final int MAX_FILES_PER_PASTE = 20;
 
@@ -603,7 +607,11 @@ public class PasteService {
             pasteRepository.incrementViews(paste.getId());
             currentViews = paste.getViews() + 1L;
             if (activityIngestionService != null && activityIngestionService.getIfAvailable() != null) {
-                activityIngestionService.getIfAvailable().recordViewEvent(paste, authenticatedUserId, clientIp);
+                try {
+                    activityIngestionService.getIfAvailable().recordViewEvent(paste, authenticatedUserId, clientIp);
+                } catch (RuntimeException e) {
+                    log.warn("Failed to record view activity for paste {}", paste.getId());
+                }
             }
         }
 
@@ -736,7 +744,7 @@ public class PasteService {
     @Transactional(readOnly = true)
     public com.pastebin.paste.api.dto.ShareDescriptorResponse getShareDescriptor(
             String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken, String unlockToken) {
-        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken);
+        Paste paste = authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken, false);
 
         String base = (publicBaseUrl != null && !publicBaseUrl.isBlank())
                 ? (publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl)
@@ -1497,7 +1505,12 @@ public class PasteService {
 
     private Paste authorizePasteAccess(String publicId, Long authenticatedUserId, String shareToken,
                                         String providedPassword, String clientIp, String unlockToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
+        return authorizePasteAccess(publicId, authenticatedUserId, shareToken, providedPassword, clientIp, unlockToken, true);
+    }
+
+    private Paste authorizePasteAccess(String publicId, Long authenticatedUserId, String shareToken,
+                                        String providedPassword, String clientIp, String unlockToken, boolean forUpdate) {
+        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken, forUpdate);
 
         if (paste.isPasswordProtected() && unlockToken != null && !unlockToken.isBlank()) {
             Optional<UnlockTokenService.UnlockTokenPayload> payload =
@@ -1551,22 +1564,26 @@ public class PasteService {
     }
 
     public Paste getActivePasteWithAccess(String publicId, Long authenticatedUserId, String providedPassword, String clientIp, String shareToken) {
-        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken);
+        Paste paste = getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken, false);
         verifyPasswordAccess(paste, providedPassword, clientIp, publicId);
         return paste;
     }
 
     private Paste getActivePasteWithAuthorization(String publicId, Long authenticatedUserId) {
-        return getActivePasteWithAuthorization(publicId, authenticatedUserId, null);
+        return getActivePasteWithAuthorization(publicId, authenticatedUserId, null, true);
     }
 
     private Paste getActivePasteWithAuthorization(String publicId, Long authenticatedUserId, String shareToken) {
+        return getActivePasteWithAuthorization(publicId, authenticatedUserId, shareToken, true);
+    }
+
+    private Paste getActivePasteWithAuthorization(String publicId, Long authenticatedUserId, String shareToken, boolean forUpdate) {
         Paste candidate = pasteRepository.findActiveByPublicIdWithFiles(publicId, Instant.now())
                 .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
 
-        // If burn-after-reading is active, acquire pessimistic write lock to serialize concurrent access
+        // If burn-after-reading is active and write lock is requested, acquire pessimistic write lock to serialize concurrent access
         Paste paste;
-        if (candidate.isBurnAfterReading()) {
+        if (candidate.isBurnAfterReading() && forUpdate) {
             paste = pasteRepository.findActiveByPublicIdForUpdate(publicId, Instant.now())
                     .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
         } else {

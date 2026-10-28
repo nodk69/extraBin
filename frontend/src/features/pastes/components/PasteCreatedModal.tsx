@@ -258,14 +258,14 @@ export const PasteCreatedModal: React.FC<PasteCreatedModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#17201d]/80 backdrop-blur-sm animate-in fade-in duration-150"
+      className="modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="paste-created-title"
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-[480px] bg-[#faf8f2] border-2 border-[#17201d] rounded-[20px] shadow-[8px_8px_0px_#17201d] overflow-hidden max-h-[90vh] flex flex-col"
+        className="modal-paper relative max-w-[480px] gap-0 overflow-hidden p-0 shadow-[8px_8px_0px_#17201d]"
       >
         {/* Close button */}
         <button

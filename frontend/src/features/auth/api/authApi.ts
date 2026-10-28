@@ -1,5 +1,5 @@
 import { apiClient } from '../../../lib/api-client/client';
-import { LoginPayload, RegisterPayload, UserResponse, PasswordResetConfirmPayload, SupabaseAuthPayload } from '../types/auth';
+import { LoginPayload, RegisterPayload, UserResponse, PasswordResetConfirmPayload, SupabaseAuthPayload, UpdateProfilePayload } from '../types/auth';
 
 export const authApi = {
   async supabaseSignUp(payload: RegisterPayload): Promise<void> {
@@ -27,6 +27,11 @@ export const authApi = {
 
   async getCurrentUser(): Promise<UserResponse> {
     const response = await apiClient.get<UserResponse>('/auth/me');
+    return response.data;
+  },
+
+  async updateProfile(payload: UpdateProfilePayload): Promise<UserResponse> {
+    const response = await apiClient.put<UserResponse>('/auth/me/profile', payload);
     return response.data;
   },
 

@@ -15,10 +15,22 @@ import java.util.List;
  */
 public record PublicAuthorProfileResponse(
         String username,
+        String displayName,
+        String bio,
+        String avatarUrl,
+        String githubUrl,
+        String linkedinUrl,
+        String xUrl,
         Instant joinedAt,
         long publicPasteCount,
         long totalViews,
         long totalSaves,
-        List<PasteSummaryResponse> recentPastes
+        List<PasteSummaryResponse> recentPastes,
+        List<PasteSummaryResponse> popularPastes,
+        List<String> topLanguages,
+        long languagesCount,
+        long followerCount,
+        long followingCount,
+        boolean followedByViewer
 ) {
 }

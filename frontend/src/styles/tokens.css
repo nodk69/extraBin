@@ -1,33 +1,151 @@
 /* ==========================================================================
-   ExtraBin Design System — Centralized Responsive Tokens
-   Single source of truth for container constraints, navigation heights,
-   safe-area insets, and fluid spacing tokens.
+   ExtraBin Design System — Tokens
+   The single source of truth for spacing, type, control, navigation, editor
+   and dialog sizing. Every responsive stylesheet and feature stylesheet is
+   expected to consume these tokens instead of inventing new magic numbers.
+
+   BREAKPOINT SCALE (keep in sync with tailwind.config.js `theme.screens`):
+     xs  : 480px  compact phones            (max-width: 479px is "tiny")
+     sm  : 640px  large phones / small tabs (Tailwind `sm`)
+     md  : 768px  tablet portrait           (Tailwind `md`) — mobile shell ends
+     lg  : 1024px desktop                   (Tailwind `lg`)
+     xl  : 1280px wide desktop              (Tailwind `xl`)
+
+   Layout transitions that are content-driven, not device-driven:
+     - workbench split stacks at 960px (the editor needs >= 560px to stay usable)
+     - account/settings tables and tab strips scroll inside their own container
+     - dialogs switch to a near-full-width sheet below 480px
+
+   Use fluid values (clamp/min/max) first; only add a media query when the
+   layout genuinely breaks at a width.
    ========================================================================== */
 
 :root {
-  /* Layout & Container Constraints */
-  --container-max: 1400px;
-  --container-pad-desktop: 24px;
-  --container-pad-tablet: 18px;
-  --container-pad-compact: 12px;
+  /* ---------------------------------------------------------------------
+     Layout & containers
+     --------------------------------------------------------------------- */
+  --content-max: 1240px;
+  --page-gutter: clamp(0.875rem, 2.6vw, 2.5rem);
+  --page-block-start: clamp(0.875rem, 2vw, 1.5rem);
+  --page-block-end: clamp(2rem, 5vw, 4rem);
 
-  /* Navigation Heights */
-  --topbar-height: 54px;
+  /* Kept for existing consumers; both now resolve through the fluid scale. */
+  --container-max: var(--content-max);
+  --container-pad-desktop: clamp(1rem, 2.6vw, 2.5rem);
+  --container-pad-tablet: clamp(1rem, 3vw, 1.75rem);
+  --container-pad-compact: 0.875rem;
+
+  /* ---------------------------------------------------------------------
+     Spacing scale (4px base)
+     --------------------------------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  --section-gap: clamp(1.5rem, 2.6vw, 2.5rem);
+  --layout-gap: clamp(1rem, 1.4vw, 1.5rem);
+  --grid-gap: clamp(0.75rem, 1.2vw, 1.125rem);
+  --card-padding: clamp(1rem, 1.5vw, 1.75rem);
+  --card-padding-sm: clamp(0.75rem, 1.2vw, 1.25rem);
+  /* Back-compat aliases */
+  --card-pad-desktop: var(--card-padding);
+  --card-pad-compact: var(--card-padding-sm);
+
+  /* ---------------------------------------------------------------------
+     Type scale
+     --------------------------------------------------------------------- */
+  --text-display: clamp(1.6rem, 1.2rem + 1.7vw, 2.5rem);
+  /* Page title for routed views (view paste, docs feature, …). Fluid so a
+     long title wraps instead of dominating a phone screen. */
+  --text-page-title: clamp(1.25rem, 1.1rem + 1vw, 1.75rem);
+  --text-h1: clamp(1.4rem, 1.2rem + 0.9vw, 2rem);
+  --text-h2: clamp(1.1rem, 1.02rem + 0.4vw, 1.375rem);
+  --text-h3: clamp(0.95rem, 0.92rem + 0.15vw, 1.0625rem);
+  --text-body: 0.9375rem;
+  --text-sm: 0.8125rem;
+  --text-xs: 0.75rem;
+  --text-meta: 0.6875rem;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* ---------------------------------------------------------------------
+     Radii & elevation
+     --------------------------------------------------------------------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-pill: 9999px;
+  --shadow-offset-sm: 2px 2px 0 var(--ink, #17201d);
+  --shadow-offset: 3px 3px 0 var(--ink, #17201d);
+  --shadow-offset-lg: 4px 4px 0 var(--ink, #17201d);
+
+  /* ---------------------------------------------------------------------
+     Navigation & safe areas
+     --------------------------------------------------------------------- */
+  --topbar-height: 64px;
+  --topbar-height-mobile: 56px;
   --bottom-nav-height: 58px;
 
-  /* Safe Area & Clearances */
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
 
-  /* Unified Mobile Navigation Clearance:
-     Accounts for bottom navigation bar (58px) + iOS safe area inset + 20px breathing margin.
-     Applied once to scrollable views to prevent content from hiding beneath the fixed bottom nav. */
-  --mobile-nav-clearance: calc(var(--bottom-nav-height) + var(--safe-bottom) + 20px);
+  /* Bottom navigation (58) + iOS safe area + breathing room. */
+  --mobile-nav-clearance: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-5));
 
-  /* Touch Targets & Input Scale */
+  /* ---------------------------------------------------------------------
+     Controls, touch targets & forms
+     --------------------------------------------------------------------- */
+  --control-h-sm: 32px;
+  --control-h: 40px;
+  --control-h-lg: 44px;
   --touch-target-min: 44px;
-  --font-size-input-compact: 16px;
-  /* Prevents iOS Safari automatic zoom on inputs */
+  --font-size-input-compact: 16px; /* prevents iOS focus zoom */
+  --border-width: 1px;
+  --border-width-strong: 1.5px;
+
+  /* ---------------------------------------------------------------------
+     Editor (Create + View paste surfaces)
+     --------------------------------------------------------------------- */
+  --editor-height: clamp(360px, calc(100dvh - 19rem), 680px);
+  /* Read-only viewer gets a taller frame than the create workbench: there is
+     no settings panel beside it, so more visible code is always better. */
+  --view-editor-height: clamp(380px, calc(100dvh - 15rem), 900px);
+  --editor-height-mobile: clamp(320px, 52dvh, 480px);
+  --editor-height-landscape: clamp(260px, 58dvh, 340px);
+  --editor-sidebar-width: clamp(200px, 22vw, 240px);
+  --editor-gutter-width: 52px;
+  --editor-gutter-width-mobile: 40px;
+  --editor-font-size: 13px;
+  --editor-line-height: 22px;
+  --editor-padding-y: 16px;
+  --editor-padding-x: 22px;
+
+  /* ---------------------------------------------------------------------
+     Dialogs
+     --------------------------------------------------------------------- */
+  --modal-gutter: clamp(0.75rem, 2.5vw, 1.5rem);
+  --modal-max-width: 520px;
+  --modal-max-width-wide: 760px;
+  --modal-max-height: calc(100dvh - (2 * var(--modal-gutter)));
+
+  /* ---------------------------------------------------------------------
+     Stacking order
+     --------------------------------------------------------------------- */
+  --z-sticky: 30;
+  --z-bottom-nav: 60;
+  --z-dropdown: 80;
+  --z-modal: 100;
+  --z-toast: 110;
 }

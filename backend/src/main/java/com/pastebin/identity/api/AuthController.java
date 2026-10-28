@@ -94,6 +94,19 @@ public class AuthController {
         throw new UnauthorizedException("Authentication required");
     }
 
+    @PutMapping("/me/profile")
+    @Operation(summary = "Update current user's public profile", description = "Replaces display name, bio, avatar, and social links for the authenticated user.")
+    public ResponseEntity<UserResponse> updateProfile(
+            @AuthenticationPrincipal Object principal,
+            @Valid @RequestBody UpdateProfileRequest request
+    ) {
+        if (principal instanceof PastebinUserPrincipal userPrincipal) {
+            UserResponse response = authService.updateProfile(userPrincipal.getId(), request);
+            return ResponseEntity.ok(response);
+        }
+        throw new UnauthorizedException("Authentication required");
+    }
+
     @PostMapping("/password-reset/request")
     @Operation(summary = "Request password reset", description = "Sends single-use token; always returns generic 200 response to avoid enumeration.")
     public ResponseEntity<Map<String, String>> requestPasswordReset(

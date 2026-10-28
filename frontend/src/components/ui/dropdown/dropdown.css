@@ -93,10 +93,25 @@
 @media (max-width: 640px) {
   .extrabin-native-select-wrapper {
     max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .extrabin-native-select {
     max-width: 100%;
+    width: 100%;
     text-overflow: ellipsis;
+    box-sizing: border-box;
+    white-space: nowrap;
+    overflow: hidden;
   }
+}
+
+/* Ensure options don't break flex/grid containment and text wraps cleanly */
+.extrabin-native-select option {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  background-color: var(--surface, #ffffff);
+  color: var(--ink, #17201d);
+  max-width: 100%;
 }

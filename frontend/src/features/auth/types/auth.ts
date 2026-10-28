@@ -5,7 +5,21 @@ export interface UserResponse {
   role: string;
   emailVerified: boolean;
   createdAt: string;
+  displayName?: string | null;
+  bio?: string | null;
   avatarUrl?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  xUrl?: string | null;
+}
+
+export interface UpdateProfilePayload {
+  displayName?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  xUrl?: string | null;
 }
 
 export interface RegisterPayload {

@@ -1,6 +1,7 @@
 import React, { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '../../../components/ui/PaperIcon';
+import { TechnologyIcon } from '../../../components/ui/TechnologyIcon';
 import { AuthorLink } from '../../authors/components/AuthorLink';
 import type { PasteSummary } from '../../dashboard/api/accountApi';
 
@@ -88,7 +89,7 @@ export interface DiscoveryCardProps {
   /** Set false to hide the author line (for example on an author's own profile). Defaults to true. */
   showAuthor?: boolean;
   /** Active discovery tab when the snippet was clicked (for accurate back-navigation). */
-  fromTab?: 'explore' | 'trending' | 'most-saved';
+  fromTab?: 'explore' | 'trending' | 'most-saved' | 'following';
 }
 
 /**
@@ -144,7 +145,10 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({
 
       <div className="discovery-card__content">
         <div className="discovery-card__top">
-          <span className={`discovery-lang discovery-lang--${tone}`}>{language}</span>
+          <span className={`discovery-lang discovery-lang--${tone} inline-flex items-center gap-1.5`}>
+            <TechnologyIcon language={language} title={item.title} tags={item.tags} size={12} />
+            {language}
+          </span>
           <time className="discovery-card__date" dateTime={publishedDateTime}>
             {publishedDate}
           </time>

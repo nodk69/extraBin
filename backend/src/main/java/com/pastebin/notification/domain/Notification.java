@@ -28,8 +28,8 @@ public class Notification {
     @JoinColumn(name = "actor_id")
     private User actor;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "paste_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "paste_id")
     private Paste paste;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -140,12 +140,12 @@ export const ShareManagementModal: React.FC<ShareManagementModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      className="modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="share-management-title"
     >
-      <div className="w-full max-w-lg paper-card p-6 shadow-2xl space-y-5 bg-[#faf8f2] border-2 border-[#17201d] rounded-xl relative">
+      <div className="modal-paper max-w-lg">
         <button
           type="button"
           onClick={onClose}
@@ -191,7 +191,7 @@ export const ShareManagementModal: React.FC<ShareManagementModalProps> = ({
                   type="text"
                   readOnly
                   value={currentUrl}
-                  className="flex-1 bg-[#f4f1e9] border border-[#d5d0c5] px-2.5 py-1.5 rounded-lg font-mono text-xs text-[#17201d] select-all truncate"
+                  className="min-w-0 flex-1 truncate rounded-lg border border-[#d5d0c5] bg-[#f4f1e9] px-2.5 py-1.5 font-mono text-xs text-[#17201d] select-all"
                   aria-label="Current shareable URL"
                 />
                 <button

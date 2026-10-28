@@ -66,7 +66,7 @@ const ResetPasswordPage: React.FC = () => {
 
   return (
     <div className="workspace max-w-md mx-auto py-16">
-      <div className="paper-card p-8 text-center space-y-6">
+      <div className="auth-card paper-card space-y-6 p-8 text-center">
         {status === 'loading' && (
           <div className="space-y-5">
             <div className="w-16 h-16 rounded-xl bg-[#c6f05b]/20 border-2 border-[#17201d] text-[#17201d] mx-auto flex items-center justify-center shadow-[3px_3px_0px_#17201d]">

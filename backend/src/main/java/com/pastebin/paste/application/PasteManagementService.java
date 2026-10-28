@@ -4,6 +4,7 @@ import com.pastebin.paste.api.dto.EditPasteFileItemRequest;
 import com.pastebin.paste.api.dto.EditPasteRequest;
 import com.pastebin.paste.api.dto.PasteFileRequest;
 import com.pastebin.paste.api.dto.PasteFileResponse;
+import com.pastebin.paste.api.dto.PasteRevisionFileResponse;
 import com.pastebin.paste.api.dto.PasteRevisionResponse;
 import com.pastebin.paste.api.dto.PasteSummaryResponse;
 import com.pastebin.paste.api.dto.PasteViewResponse;
@@ -78,13 +79,19 @@ public class PasteManagementService {
     @Transactional(readOnly = true)
     public PagedResponse<PasteSummaryResponse> searchUserPastes(Long userId, Long folderId, Boolean unfiled,
                                                                 String search, String tagName, Pageable pageable) {
+        return searchUserPastes(userId, null, folderId, unfiled, search, tagName, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<PasteSummaryResponse> searchUserPastes(Long userId, Visibility visibility, Long folderId, Boolean unfiled,
+                                                                String search, String tagName, Pageable pageable) {
         Instant now = Instant.now();
         String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
         String normalizedTag = (tagName != null && !tagName.isBlank()) ? tagName.trim().toLowerCase(java.util.Locale.ROOT) : null;
         boolean unfiledOnly = Boolean.TRUE.equals(unfiled);
 
         Page<Paste> page = pasteRepository.findUserLibraryPastes(
-                userId, now, folderId, unfiledOnly, normalizedTag, normalizedSearch, pageable);
+                userId, now, visibility, folderId, unfiledOnly, normalizedTag, normalizedSearch, pageable);
 
         List<PasteSummaryResponse> summaries = page.getContent().stream()
                 .map(this::toSummaryResponse)
@@ -197,7 +204,7 @@ public class PasteManagementService {
             throw new PayloadTooLargeException("Total updated content size (" + totalBytes + " bytes) exceeds limit of " + maxContentBytes + " bytes.");
         }
 
-        // Store snapshot of current state as a revision
+        // Store snapshot of current state as a revision including all workspace files
         PasteRevision revision = new PasteRevision(
                 paste.getId(),
                 paste.getVersion(),
@@ -205,6 +212,30 @@ public class PasteManagementService {
                 paste.getContent(),
                 paste.getLanguage()
         );
+        if (paste.getFiles() != null && !paste.getFiles().isEmpty()) {
+            for (PasteFile pf : paste.getFiles()) {
+                boolean isPrimary = pf.getSortOrder() == 0;
+                revision.addFile(new com.pastebin.paste.domain.PasteRevisionFile(
+                        revision,
+                        pf.getFilename(),
+                        pf.getContent() != null ? pf.getContent() : "",
+                        pf.getLanguage(),
+                        pf.getSortOrder(),
+                        isPrimary
+                ));
+            }
+        } else {
+            // Fallback for single-file legacy paste without paste_files rows
+            String singleFilename = PasteService.deriveFilename(paste.getTitle(), paste.getLanguage(), paste.getPublicId());
+            revision.addFile(new com.pastebin.paste.domain.PasteRevisionFile(
+                    revision,
+                    singleFilename,
+                    paste.getContent() != null ? paste.getContent() : "",
+                    paste.getLanguage(),
+                    0,
+                    true
+            ));
+        }
         pasteRevisionRepository.save(revision);
 
         // Apply modifications to paste metadata
@@ -333,16 +364,213 @@ public class PasteManagementService {
             throw new ForbiddenException("You do not have permission to view revisions for this paste.");
         }
 
-        return pasteRevisionRepository.findByPasteIdOrderByVersionDesc(paste.getId()).stream()
-                .map(r -> new PasteRevisionResponse(
-                        r.getId(),
-                        r.getVersion(),
-                        r.getTitle(),
-                        r.getContent(),
-                        r.getLanguage(),
-                        r.getCreatedAt()
+        return pasteRevisionRepository.findByPasteIdWithFilesOrderByVersionDesc(paste.getId()).stream()
+                .map(r -> {
+                    List<PasteRevisionFileResponse> fileResponses = (r.getFiles() != null && !r.getFiles().isEmpty())
+                            ? r.getFiles().stream()
+                            .map(rf -> new PasteRevisionFileResponse(
+                                    rf.getId(),
+                                    rf.getFilename(),
+                                    rf.getContent(),
+                                    rf.getLanguage(),
+                                    rf.getContent().getBytes(StandardCharsets.UTF_8).length,
+                                    countLines(rf.getContent()),
+                                    rf.getSortOrder(),
+                                    rf.isPrimary() || rf.getSortOrder() == 0
+                            ))
+                            .toList()
+                            : List.of(new PasteRevisionFileResponse(
+                            null,
+                            PasteService.deriveFilename(r.getTitle(), r.getLanguage(), paste.getPublicId()),
+                            r.getContent(),
+                            r.getLanguage(),
+                            r.getContent() != null ? r.getContent().getBytes(StandardCharsets.UTF_8).length : 0,
+                            countLines(r.getContent()),
+                            0,
+                            true
+                    ));
+
+                    return new PasteRevisionResponse(
+                            r.getId(),
+                            r.getVersion(),
+                            r.getTitle(),
+                            r.getContent(),
+                            r.getLanguage(),
+                            r.getCreatedAt(),
+                            fileResponses
+                    );
+                })
+                .toList();
+    }
+
+    @Transactional
+    public PasteViewResponse restoreRevision(String publicId, Long targetVersion, Long userId) {
+        Paste paste = pasteRepository.findActiveByPublicIdWithFilesForUpdate(publicId, Instant.now())
+                .orElseThrow(() -> new ResourceNotFoundException("Paste not found or has expired."));
+
+        if (!userId.equals(paste.getUserId())) {
+            throw new ResourceNotFoundException("Paste not found or has expired.");
+        }
+
+        if (paste.isEncrypted()) {
+            throw new BadRequestException("Encrypted pastes cannot be restored via the plaintext editor.");
+        }
+
+        if (paste.getVersion().equals(targetVersion)) {
+            throw new BadRequestException("Cannot restore version " + targetVersion + " because it is already the current version.");
+        }
+
+        PasteRevision targetRevision = pasteRevisionRepository.findByPasteIdAndVersionWithFiles(paste.getId(), targetVersion)
+                .orElseThrow(() -> new ResourceNotFoundException("Revision version " + targetVersion + " not found for this paste."));
+
+        // Acquire OPTIMISTIC_FORCE_INCREMENT so version is guaranteed to increment
+        entityManager.lock(paste, jakarta.persistence.LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+        paste.setLastEditedAt(Instant.now());
+
+        // Snapshot current state before restoring
+        PasteRevision currentSnapshot = new PasteRevision(
+                paste.getId(),
+                paste.getVersion(),
+                paste.getTitle(),
+                paste.getContent(),
+                paste.getLanguage()
+        );
+        if (paste.getFiles() != null && !paste.getFiles().isEmpty()) {
+            for (PasteFile pf : paste.getFiles()) {
+                boolean isPrimary = pf.getSortOrder() == 0;
+                currentSnapshot.addFile(new com.pastebin.paste.domain.PasteRevisionFile(
+                        currentSnapshot,
+                        pf.getFilename(),
+                        pf.getContent() != null ? pf.getContent() : "",
+                        pf.getLanguage(),
+                        pf.getSortOrder(),
+                        isPrimary
+                ));
+            }
+        } else {
+            String singleFilename = PasteService.deriveFilename(paste.getTitle(), paste.getLanguage(), paste.getPublicId());
+            currentSnapshot.addFile(new com.pastebin.paste.domain.PasteRevisionFile(
+                    currentSnapshot,
+                    singleFilename,
+                    paste.getContent() != null ? paste.getContent() : "",
+                    paste.getLanguage(),
+                    0,
+                    true
+            ));
+        }
+        pasteRevisionRepository.save(currentSnapshot);
+
+        // Reconstruct workspace from targetRevision.getFiles()
+        List<com.pastebin.paste.domain.PasteRevisionFile> revFiles = targetRevision.getFiles();
+        List<EditPasteFileItemRequest> restoredFileRequests = new ArrayList<>();
+
+        if (revFiles != null && !revFiles.isEmpty()) {
+            // Sort to ensure primary file is always index 0
+            List<com.pastebin.paste.domain.PasteRevisionFile> sortedRevFiles = new ArrayList<>(revFiles);
+            sortedRevFiles.sort((a, b) -> {
+                if (a.isPrimary() != b.isPrimary()) {
+                    return a.isPrimary() ? -1 : 1;
+                }
+                return Integer.compare(a.getSortOrder(), b.getSortOrder());
+            });
+
+            for (com.pastebin.paste.domain.PasteRevisionFile rf : sortedRevFiles) {
+                restoredFileRequests.add(new EditPasteFileItemRequest(
+                        null,
+                        rf.getFilename(),
+                        rf.getContent(),
+                        rf.getLanguage()
+                ));
+            }
+        } else {
+            // Legacy single-file revision without child files
+            String filename = PasteService.deriveFilename(targetRevision.getTitle(), targetRevision.getLanguage(), paste.getPublicId());
+            restoredFileRequests.add(new EditPasteFileItemRequest(
+                    null,
+                    filename,
+                    targetRevision.getContent(),
+                    targetRevision.getLanguage()
+            ));
+        }
+
+        // Apply metadata from targetRevision
+        EditPasteFileItemRequest primaryReq = restoredFileRequests.get(0);
+        String primaryLang = PasteService.resolveLanguage(primaryReq.language(), primaryReq.filename().trim());
+        boolean wasPublic = paste.getVisibility() == Visibility.PUBLIC;
+        paste.setTitle(targetRevision.getTitle());
+        paste.setContent(primaryReq.content());
+        paste.setLanguage(primaryLang);
+
+        long totalBytes = 0;
+        int totalLines = 0;
+        for (EditPasteFileItemRequest fileReq : restoredFileRequests) {
+            byte[] fileBytes = fileReq.content().getBytes(StandardCharsets.UTF_8);
+            totalBytes += fileBytes.length;
+            totalLines += countLines(fileReq.content());
+        }
+        paste.setContentSizeBytes((int) totalBytes);
+        paste.setLineCount(totalLines);
+        paste.setUpdatedAt(Instant.now());
+
+        // Replace all workspace files with the restored files
+        if (paste.getFiles() != null) {
+            paste.getFiles().clear();
+            pasteRepository.flush();
+        }
+
+        for (int i = 0; i < restoredFileRequests.size(); i++) {
+            EditPasteFileItemRequest fileReq = restoredFileRequests.get(i);
+            String filename = java.text.Normalizer.normalize(fileReq.filename(), java.text.Normalizer.Form.NFC).trim();
+            String fileLang = PasteService.resolveLanguage(fileReq.language(), filename);
+            PasteFile newFile = new PasteFile(paste, filename, fileReq.content(), fileLang, i);
+            paste.addFile(newFile);
+        }
+
+        if (paste.getFiles() != null) {
+            paste.getFiles().sort(Comparator.comparingInt(PasteFile::getSortOrder));
+        }
+
+        Paste updated = pasteRepository.saveAndFlush(paste);
+        if (wasPublic || updated.getVisibility() == Visibility.PUBLIC) {
+            eventPublisher.publishEvent(new PublicListingChangedEvent());
+        }
+
+        if (meilisearchIndexServiceProvider != null && meilisearchIndexServiceProvider.getIfAvailable() != null) {
+            meilisearchIndexServiceProvider.getIfAvailable().syncPaste(updated);
+        }
+
+        List<PasteFileResponse> fileResponses = updated.getFiles().stream()
+                .map(f -> new PasteFileResponse(
+                        f.getId(),
+                        f.getFilename(),
+                        f.getContent(),
+                        f.getLanguage(),
+                        f.getContent().getBytes(StandardCharsets.UTF_8).length,
+                        countLines(f.getContent()),
+                        f.getSortOrder()
                 ))
                 .toList();
+
+        return new PasteViewResponse(
+                updated.getPublicId(),
+                updated.getTitle(),
+                updated.getContent(),
+                updated.getLanguage(),
+                updated.getVisibility(),
+                updated.getContentSizeBytes(),
+                updated.getLineCount(),
+                true,
+                updated.getCreatedAt(),
+                updated.getUpdatedAt(),
+                updated.getExpiresAt(),
+                updated.getVersion(),
+                updated.isBurnAfterReading(),
+                updated.isBurnAfterReading(),
+                updated.isPasswordProtected(),
+                false,
+                fileResponses,
+                updated.getViews()
+        );
     }
 
     private PasteSummaryResponse toSummaryResponse(Paste paste) {

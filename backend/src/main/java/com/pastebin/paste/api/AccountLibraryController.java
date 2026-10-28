@@ -42,4 +42,10 @@ public class AccountLibraryController {
     public ResponseEntity<List<PasteSummaryResponse>> recentlyEdited(@AuthenticationPrincipal PastebinUserPrincipal principal) {
         return ResponseEntity.ok(libraryService.getRecentlyEdited(principal.getId()));
     }
+
+    @GetMapping("/stats")
+    @Operation(summary = "Get user account statistics", description = "Returns complete workspace metrics (total pastes, visibility counts, lines, views) across the entire user dataset.")
+    public ResponseEntity<com.pastebin.paste.api.dto.AccountStatsResponse> accountStats(@AuthenticationPrincipal PastebinUserPrincipal principal) {
+        return ResponseEntity.ok(libraryService.getAccountStats(principal.getId()));
+    }
 }

@@ -26,6 +26,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u.id, u.username FROM User u WHERE u.id IN :ids")
     java.util.List<Object[]> findUsernamesByIds(@Param("ids") java.util.Collection<Long> ids);
 
+    @Query(value = "SELECT u.id FROM users u WHERE (:viewerId IS NULL OR NOT EXISTS (SELECT 1 FROM user_follows f WHERE f.follower_id = :viewerId AND f.followed_id = u.id)) ORDER BY (SELECT COUNT(*) FROM pastes p WHERE p.user_id = u.id AND p.visibility = 'PUBLIC' AND (p.expires_at IS NULL OR p.expires_at > :now) AND p.burn_after_reading = FALSE AND p.password_hash IS NULL AND p.encryption_mode IS NULL AND p.moderation_state = 'ACTIVE') DESC, u.created_at DESC, u.id DESC", countQuery = "SELECT COUNT(u.id) FROM users u WHERE (:viewerId IS NULL OR NOT EXISTS (SELECT 1 FROM user_follows f WHERE f.follower_id = :viewerId AND f.followed_id = u.id))", nativeQuery = true)
+    org.springframework.data.domain.Page<Long> findDiscoverableDeveloperIds(@Param("viewerId") Long viewerId,
+                                                                            @Param("now") java.time.Instant now,
+                                                                            org.springframework.data.domain.Pageable pageable);
+
     @Query("SELECT u.sessionVersion FROM User u WHERE u.id = :id")
     Optional<Long> findSessionVersionById(@Param("id") Long id);
 
@@ -41,7 +46,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      *
      * <p>Only the columns without a database default are supplied: {@code role},
      * {@code created_at}, {@code updated_at}, {@code session_version} and
-     * {@code notify_on_replies} are filled by the table defaults established in
+     * {@code notify_on_replies} and {@code notify_on_follows} are filled by table defaults established in
      * {@code V1__init_schema.sql}, {@code V6} and {@code V9}. A future NOT NULL column
      * without a default must be added here.
      *
@@ -50,8 +55,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     @Modifying
     @Query(value = """
-            INSERT INTO users (username, email, password_hash, role, email_verified, notify_on_replies, session_version, created_at, updated_at)
-            VALUES (:username, :email, :passwordHash, 'ROLE_USER', TRUE, TRUE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            INSERT INTO users (username, email, password_hash, role, email_verified, notify_on_replies, notify_on_follows, session_version, created_at, updated_at)
+            VALUES (:username, :email, :passwordHash, 'ROLE_USER', TRUE, TRUE, TRUE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT DO NOTHING
             """, nativeQuery = true)
     int insertIfAbsent(@Param("username") String username,

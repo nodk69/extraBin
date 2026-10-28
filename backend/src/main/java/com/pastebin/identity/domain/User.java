@@ -32,6 +32,27 @@ public class User {
     @Column(name = "notify_on_replies", nullable = false)
     private boolean notifyOnReplies = true;
 
+    @Column(name = "notify_on_follows", nullable = false)
+    private boolean notifyOnFollows = true;
+
+    @Column(name = "display_name", length = 80)
+    private String displayName;
+
+    @Column(name = "bio", length = 500)
+    private String bio;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
+    @Column(name = "github_url", length = 255)
+    private String githubUrl;
+
+    @Column(name = "linkedin_url", length = 255)
+    private String linkedinUrl;
+
+    @Column(name = "x_url", length = 255)
+    private String xUrl;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -113,6 +134,72 @@ public class User {
 
     public void setNotifyOnReplies(boolean notifyOnReplies) {
         this.notifyOnReplies = notifyOnReplies;
+    }
+
+    public boolean isNotifyOnFollows() {
+        return notifyOnFollows;
+    }
+
+    public void setNotifyOnFollows(boolean notifyOnFollows) {
+        this.notifyOnFollows = notifyOnFollows;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+        touch();
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
+        touch();
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+        touch();
+    }
+
+    public String getGithubUrl() {
+        return githubUrl;
+    }
+
+    public void setGithubUrl(String githubUrl) {
+        this.githubUrl = githubUrl;
+        touch();
+    }
+
+    public String getLinkedinUrl() {
+        return linkedinUrl;
+    }
+
+    public void setLinkedinUrl(String linkedinUrl) {
+        this.linkedinUrl = linkedinUrl;
+        touch();
+    }
+
+    public String getXUrl() {
+        return xUrl;
+    }
+
+    public void setXUrl(String xUrl) {
+        this.xUrl = xUrl;
+        touch();
+    }
+
+    private void touch() {
+        this.updatedAt = Instant.now();
     }
 
     public Instant getCreatedAt() {

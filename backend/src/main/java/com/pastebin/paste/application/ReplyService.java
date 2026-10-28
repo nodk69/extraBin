@@ -40,6 +40,8 @@ public class ReplyService {
     private final RateLimiterService rateLimiterService;
     private final NotificationService notificationService;
     private final PasswordEncoder passwordEncoder;
+    private final com.pastebin.discovery.application.PasteActivityIngestionService activity;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public ReplyService(
             ReplyRepository replyRepository,
@@ -48,7 +50,9 @@ public class ReplyService {
             UserRepository userRepository,
             RateLimiterService rateLimiterService,
             NotificationService notificationService,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            com.pastebin.discovery.application.PasteActivityIngestionService activity,
+            org.springframework.context.ApplicationEventPublisher events
     ) {
         this.replyRepository = replyRepository;
         this.replyVoteRepository = replyVoteRepository;
@@ -57,6 +61,8 @@ public class ReplyService {
         this.rateLimiterService = rateLimiterService;
         this.notificationService = notificationService;
         this.passwordEncoder = passwordEncoder;
+        this.activity = activity;
+        this.events = events;
     }
 
     @Transactional
@@ -107,6 +113,7 @@ public class ReplyService {
 
         Reply reply = new Reply(paste, parentReply, author, sanitizedContent);
         Reply saved = replyRepository.save(reply);
+        activity.recordReplyEvent(saved);
 
         // Notify relevant authors
         notificationService.notifyReplyCreated(paste, parentReply, saved, author);
@@ -231,6 +238,7 @@ public class ReplyService {
         // Soft delete: keep thread structure and show [deleted]
         reply.setDeleted(true);
         replyRepository.save(reply);
+        events.publishEvent(new PublicListingChangedEvent());
     }
 
     private Paste getPasteForReply(String publicId, Long authenticatedUserId, String shareToken) {

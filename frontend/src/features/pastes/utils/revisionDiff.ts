@@ -9,7 +9,7 @@ import type { PasteRevision } from '../../dashboard/api/accountApi';
 export interface VersionEntry {
   /** The version number (0, 1, 2, ...) */
   version: number;
-  /** The content snapshot for this version */
+  /** The primary content snapshot for this version */
   content: string;
   /** The title at this version */
   title?: string;
@@ -23,6 +23,8 @@ export interface VersionEntry {
   source: 'live' | 'revision';
   /** True if the version chain is inconsistent (stale fetch detected) */
   inconsistent?: boolean;
+  /** Complete workspace files for this version */
+  files: WorkspaceFileSnapshot[];
 }
 
 export interface LineDiffChange {
@@ -58,6 +60,34 @@ export interface LineDiffResult {
   limitExceededReason?: string;
 }
 
+export type FileDiffStatus = 'added' | 'deleted' | 'modified' | 'unchanged';
+
+export interface WorkspaceFileSnapshot {
+  id?: number;
+  filename: string;
+  content: string;
+  language: string;
+  sortOrder?: number;
+}
+
+export interface WorkspaceFileDiff {
+  filename: string;
+  status: FileDiffStatus;
+  baseFile?: WorkspaceFileSnapshot;
+  targetFile?: WorkspaceFileSnapshot;
+  diffResult: LineDiffResult;
+}
+
+export interface WorkspaceSummaryDiff {
+  files: WorkspaceFileDiff[];
+  totalAdditions: number;
+  totalDeletions: number;
+  addedCount: number;
+  deletedCount: number;
+  modifiedCount: number;
+  unchangedCount: number;
+}
+
 // ---------------------------------------------------------------------------
 // Canonical Version List Builder
 // ---------------------------------------------------------------------------
@@ -76,6 +106,24 @@ export function buildCanonicalVersionList(
   // Check for inconsistent state: revision version >= paste version
   const hasInconsistency = sortedRevisions.some((r) => r.version >= paste.version);
 
+  const liveFiles: WorkspaceFileSnapshot[] =
+    paste.files && paste.files.length > 0
+      ? paste.files.map((f, idx) => ({
+          id: f.id,
+          filename: f.filename,
+          content: f.content,
+          language: f.language || 'plaintext',
+          sortOrder: f.sortOrder ?? idx,
+        }))
+      : [
+          {
+            filename: paste.title ? `${paste.title}.txt` : 'paste.txt',
+            content: paste.content,
+            language: paste.language || 'plaintext',
+            sortOrder: 0,
+          },
+        ];
+
   const liveEntry: VersionEntry = {
     version: paste.version,
     content: paste.content,
@@ -85,18 +133,40 @@ export function buildCanonicalVersionList(
     isCurrent: true,
     source: 'live',
     inconsistent: hasInconsistency ? true : undefined,
+    files: liveFiles,
   };
 
-  const revisionEntries: VersionEntry[] = sortedRevisions.map((rev) => ({
-    version: rev.version,
-    content: rev.content ?? '',
-    title: rev.title,
-    language: rev.language || 'plaintext',
-    createdAt: rev.createdAt,
-    isCurrent: false,
-    source: 'revision',
-    inconsistent: hasInconsistency ? true : undefined,
-  }));
+  const revisionEntries: VersionEntry[] = sortedRevisions.map((rev) => {
+    const revFiles: WorkspaceFileSnapshot[] =
+      rev.files && rev.files.length > 0
+        ? rev.files.map((f, idx) => ({
+            id: f.id,
+            filename: f.filename,
+            content: f.content,
+            language: f.language || 'plaintext',
+            sortOrder: f.sortOrder ?? idx,
+          }))
+        : [
+            {
+              filename: rev.title ? `${rev.title}.txt` : 'paste.txt',
+              content: rev.content ?? '',
+              language: rev.language || 'plaintext',
+              sortOrder: 0,
+            },
+          ];
+
+    return {
+      version: rev.version,
+      content: rev.content ?? '',
+      title: rev.title,
+      language: rev.language || 'plaintext',
+      createdAt: rev.createdAt,
+      isCurrent: false,
+      source: 'revision',
+      inconsistent: hasInconsistency ? true : undefined,
+      files: revFiles,
+    };
+  });
 
   return [liveEntry, ...revisionEntries];
 }
@@ -260,5 +330,116 @@ export function computeLineDiff(
     hasEofNewlineDifference,
     hasLineEndingDifference,
     changes,
+  };
+}
+
+/**
+ * Computes a workspace-wide diff between base and target file collections.
+ * Detects added, deleted, modified, and unchanged files.
+ */
+export function computeWorkspaceDiff(
+  baseFiles: WorkspaceFileSnapshot[],
+  targetFiles: WorkspaceFileSnapshot[],
+): WorkspaceSummaryDiff {
+  const baseMap = new Map<string, WorkspaceFileSnapshot>();
+  for (const f of baseFiles) {
+    baseMap.set(f.filename.toLowerCase(), f);
+  }
+
+  const targetMap = new Map<string, WorkspaceFileSnapshot>();
+  for (const f of targetFiles) {
+    targetMap.set(f.filename.toLowerCase(), f);
+  }
+
+  // Collect all unique filenames preserving order: target files first (in sort order), then deleted base files
+  const orderedFilenames: string[] = [];
+  const seen = new Set<string>();
+
+  for (const f of targetFiles) {
+    const key = f.filename.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      orderedFilenames.push(f.filename);
+    }
+  }
+
+  for (const f of baseFiles) {
+    const key = f.filename.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      orderedFilenames.push(f.filename);
+    }
+  }
+
+  const fileDiffs: WorkspaceFileDiff[] = [];
+  let totalAdditions = 0;
+  let totalDeletions = 0;
+  let addedCount = 0;
+  let deletedCount = 0;
+  let modifiedCount = 0;
+  let unchangedCount = 0;
+
+  for (const filename of orderedFilenames) {
+    const key = filename.toLowerCase();
+    const baseFile = baseMap.get(key);
+    const targetFile = targetMap.get(key);
+
+    if (baseFile && targetFile) {
+      const diff = computeLineDiff(baseFile.content, targetFile.content);
+      const isModified = diff.additions > 0 || diff.deletions > 0 || baseFile.content !== targetFile.content;
+      const status: FileDiffStatus = isModified ? 'modified' : 'unchanged';
+
+      if (isModified) {
+        modifiedCount++;
+      } else {
+        unchangedCount++;
+      }
+      totalAdditions += diff.additions;
+      totalDeletions += diff.deletions;
+
+      fileDiffs.push({
+        filename: targetFile.filename,
+        status,
+        baseFile,
+        targetFile,
+        diffResult: diff,
+      });
+    } else if (targetFile && !baseFile) {
+      // Added in target
+      const diff = computeLineDiff('', targetFile.content);
+      addedCount++;
+      totalAdditions += diff.additions;
+
+      fileDiffs.push({
+        filename: targetFile.filename,
+        status: 'added',
+        baseFile: undefined,
+        targetFile,
+        diffResult: diff,
+      });
+    } else if (baseFile && !targetFile) {
+      // Deleted from target
+      const diff = computeLineDiff(baseFile.content, '');
+      deletedCount++;
+      totalDeletions += diff.deletions;
+
+      fileDiffs.push({
+        filename: baseFile.filename,
+        status: 'deleted',
+        baseFile,
+        targetFile: undefined,
+        diffResult: diff,
+      });
+    }
+  }
+
+  return {
+    files: fileDiffs,
+    totalAdditions,
+    totalDeletions,
+    addedCount,
+    deletedCount,
+    modifiedCount,
+    unchangedCount,
   };
 }

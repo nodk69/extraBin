@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Icon, IconName } from '../../../components/ui/PaperIcon';
+import { Icon } from '../../../components/ui/PaperIcon';
+import { TechnologyIcon } from '../../../components/ui/TechnologyIcon';
 import { Select, SelectOption } from '../../../components/ui/Select';
 import { pasteApi } from '../api/pasteApi';
 import { discoveryApi } from '../../discovery/api/discoveryApi';
@@ -70,6 +71,129 @@ const defaultRecentPastes: RecentCardItem[] = [
   { title: 'Promise pool utility', language: 'JavaScript', age: 'just now', views: 0, expiryBadge: '7d', color: 'coral' },
   { title: 'nginx redirect config', language: 'Nginx', age: '2h ago', views: 18, expiryBadge: 'Never', color: 'blue' },
   { title: 'Notes from systems lecture', language: 'Plain text', age: 'Yesterday', views: 7, expiryBadge: '30d', color: 'lime' },
+];
+
+interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+const RECOMMENDED_FAQS: FaqItem[] = [
+  {
+    id: 'what-is-extrabin',
+    question: 'What is ExtraBin?',
+    answer:
+      'ExtraBin is a place to save, organize, and share code snippets, text, configuration files, logs, and other developer notes. You can create pastes, highlight code, manage multiple files, and control how your content is accessed.',
+  },
+  {
+    id: 'how-to-create',
+    question: 'How do I create a paste?',
+    answer:
+      'Open the editor, enter or paste your content, choose a title and programming language, configure visibility or expiration if needed, and create the paste. You can use the editor for code, plain text, and supported multi-file projects.',
+  },
+  {
+    id: 'account-needed',
+    question: 'Do I need an account to use ExtraBin?',
+    answer:
+      'You can create public or unlisted pastes without signing in if guest creation is enabled. Sign in to use account-only features such as private pastes and your personal library. The available actions depend on the feature and access permissions.',
+  },
+  {
+    id: 'visibility-differences',
+    question: 'What is the difference between Public, Unlisted, and Private?',
+    answer:
+      "Public pastes can appear in Explore and public discovery. Unlisted pastes are accessed through their direct link and are not intended for public discovery. Private pastes require the owner's authorized account access. Unlisted does not mean encrypted, and anyone who obtains an unlisted link may be able to open it.",
+  },
+  {
+    id: 'how-to-share',
+    question: 'How do I share a paste?',
+    answer:
+      "Open the paste and copy its share link. Check the paste's visibility and any password or access requirements before sharing. Anyone receiving the link may be able to access an unlisted paste, so do not treat the link itself as a guarantee of confidentiality.",
+  },
+  {
+    id: 'password-protect',
+    question: 'Can I password-protect a paste?',
+    answer:
+      'Yes, where password protection is available. Set a password when creating or configuring the paste, then share the password separately from the link. Password protection and visibility are separate controls.',
+  },
+  {
+    id: 'expiration-automatic',
+    question: 'Can I set a paste to expire automatically?',
+    answer:
+      'Yes. Choose a supported expiration option, such as one hour, one day, one week, or one month, or choose never to expire where available. Expired pastes are no longer available through normal access.',
+  },
+  {
+    id: 'burn-after-reading',
+    question: 'What does Burn After Reading mean?',
+    answer:
+      'Burn After Reading is intended for one-time access. After the paste is successfully consumed, subsequent attempts should no longer be able to retrieve it. It is not a guarantee that a recipient cannot copy, screenshot, or save the content before it is consumed.',
+  },
+  {
+    id: 'multiple-files',
+    question: 'Can I save multiple files in one paste?',
+    answer:
+      'Yes. ExtraBin supports multi-file pastes, letting you keep related files together. You can select individual files and, where supported, download the collection as a ZIP archive.',
+  },
+  {
+    id: 'syntax-highlighting',
+    question: 'Does ExtraBin support syntax highlighting?',
+    answer:
+      'Yes. ExtraBin supports syntax highlighting for many programming languages. Select a language in the editor, or use automatic language detection where available. If highlighting looks incorrect, check the selected language.',
+  },
+  {
+    id: 'find-saved-pastes',
+    question: 'How do I find my saved pastes later?',
+    answer:
+      'When signed in, use your personal library to find and manage your pastes. Depending on the available features, you can filter by visibility, search, organize pastes into folders, and use tags to keep related snippets together.',
+  },
+  {
+    id: 'edit-after-creating',
+    question: 'Can I edit a paste after creating it?',
+    answer:
+      "Editing depends on your permissions and the paste's access rules. If you own the paste and are authorized to edit it, open it through your account or the relevant edit workflow. A shared link does not automatically grant editing permission.",
+  },
+  {
+    id: 'download-or-copy',
+    question: 'Can I download or copy a paste?',
+    answer:
+      'You can copy paste content and use the available raw or download options. Multi-file pastes may also offer individual-file downloads or a ZIP download. Protected content remains subject to its access requirements.',
+  },
+  {
+    id: 'content-encrypted',
+    question: 'Is my content encrypted?',
+    answer:
+      'Encryption depends on the mode you choose. Browser-based end-to-end encryption is designed so the server does not receive the decryption key. Ordinary public or unlisted visibility is not the same as encryption. Keep your decryption key safe; losing it may mean losing access to the encrypted content.',
+  },
+  {
+    id: 'use-as-api',
+    question: 'Can I use ExtraBin as an API?',
+    answer:
+      'ExtraBin provides machine-readable access formats for supported pastes, including raw content and documented JSON or YAML representations where available. Access restrictions still apply, and encrypted content should not be assumed to be available as readable plaintext. Check the documentation for the supported endpoints and formats.',
+  },
+  {
+    id: 'delete-or-revoke',
+    question: 'Can I delete or revoke access to a shared paste?',
+    answer:
+      'Use the available management controls to delete a paste or revoke or rotate a supported share link. Revoking access cannot erase copies that recipients have already downloaded, copied, screenshotted, or decrypted.',
+  },
+  {
+    id: 'why-cannot-open',
+    question: "Why can't I open a paste?",
+    answer:
+      'The paste may have expired, been deleted, been made private, require a password or share token, or reference an invalid file. Confirm you are using the correct link and have the required access. If the problem continues, contact the site maintainer.',
+  },
+  {
+    id: 'storing-passwords-secrets',
+    question: 'Is ExtraBin suitable for storing passwords or production secrets?',
+    answer:
+      'Avoid putting live credentials, API keys, private keys, or other high-impact secrets into an ordinary paste. If you must share sensitive material, understand the encryption and access controls first, share access details separately, and revoke or rotate exposed credentials immediately.',
+  },
+  {
+    id: 'help-or-learn-more',
+    question: 'Where can I get help or learn more?',
+    answer:
+      "Visit the documentation for feature guides and API details. If you still need help, use the application's available contact or support channel and include the issue you encountered without sharing passwords, tokens, or private paste contents.",
+  },
 ];
 
 export const CreatePastePage: React.FC = () => {
@@ -385,7 +509,6 @@ export const CreatePastePage: React.FC = () => {
   }, []);
 
   const {
-    draftStatus,
     recoverableDraft,
     restoreDraft,
     discardDraft,
@@ -480,6 +603,18 @@ export const CreatePastePage: React.FC = () => {
 
   // Synchronous guard against duplicate submit invocations (Finding 5)
   const submittingRef = useRef(false);
+
+  // FAQ accordion state
+  const [openFaqIds, setOpenFaqIds] = useState<Record<string, boolean>>({
+    'what-is-extrabin': true, // Open first question by default
+  });
+
+  const toggleFaq = (id: string) => {
+    setOpenFaqIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   const tabStripRef = useRef<HTMLDivElement>(null);
 
@@ -1020,6 +1155,7 @@ export const CreatePastePage: React.FC = () => {
                 onClick={handleStartFresh}
                 className="px-2.5 py-1 text-xs font-mono font-bold rounded border border-[#525f59] bg-[#17201d] text-[#e8ece6] hover:text-[#ff5c3d] hover:border-[#ff5c3d] transition-all flex items-center gap-1.5 cursor-pointer"
                 title="Clear all fields and start a fresh paste"
+                aria-label="Start fresh"
               >
                 <Icon name="refresh" size={12} />
                 <span className="hidden sm:inline">Start fresh</span>
@@ -1041,6 +1177,7 @@ export const CreatePastePage: React.FC = () => {
                 disabled={!content.trim()}
                 className="px-2.5 py-1 text-xs font-mono font-bold rounded border border-[#525f59] bg-[#17201d] text-[#c6f05b] hover:border-[#c6f05b] transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Copy active file content to clipboard"
+                aria-label="Copy active file content"
               >
                 <Icon name={copied ? 'check' : 'copy'} size={13} />
                 <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
@@ -1085,8 +1222,10 @@ export const CreatePastePage: React.FC = () => {
                   onClick={() => setActiveFileId(file.id)}
                   className={`editor-file-tab ${isActive ? 'active' : ''}`}
                 >
-                  <Icon
-                    name="file"
+                  <TechnologyIcon
+                    filename={file.filename}
+                    content={file.content}
+                    language={file.language}
                     size={13}
                     className={isActive ? 'text-[#ff5c3d]' : 'text-[#74786f]'}
                   />
@@ -1095,6 +1234,7 @@ export const CreatePastePage: React.FC = () => {
                     value={file.filename}
                     onChange={(e) => setFilename(file.id, e.target.value)}
                     onClick={(e) => e.stopPropagation()}
+                    onFocus={() => setActiveFileId(file.id)}
                     className="editor-filename-input"
                     placeholder="filename.ext"
                     title="Click to rename file (auto-detects language)"
@@ -1105,6 +1245,7 @@ export const CreatePastePage: React.FC = () => {
                       onClick={(e) => handleRemoveFile(e, file.id)}
                       className="editor-file-close"
                       title="Remove file"
+                      aria-label={`Remove file ${file.filename}`}
                     >
                       &times;
                     </button>
@@ -1183,7 +1324,7 @@ export const CreatePastePage: React.FC = () => {
           </div>
 
           {/* Contextual Mode Strip: Real ExtraBin Encryption Preview or API Hint */}
-          {enableE2E ? (
+          {enableE2E && (
             <div className="editor-security-strip" role="status" aria-label="End-to-end encryption active">
               <Icon name="lock" size={13} className="text-[#c6f05b] shrink-0" />
               <span className="shrink-0 text-[#a6aea9] font-semibold">On server:</span>
@@ -1194,52 +1335,10 @@ export const CreatePastePage: React.FC = () => {
                 AES-256-GCM client-side encrypted
               </span>
             </div>
-          ) : (
-            <div className="editor-security-strip" role="status" aria-label="Open API paste mode">
-              <Icon name="code" size={13} className="text-[#ff8a70] shrink-0" />
-              <span className="shrink-0 text-[#a6aea9] font-semibold">API ready:</span>
-              <span className="text-[#ff8a70] truncate font-mono text-[11px] selection:bg-[#ff8a70] selection:text-[#17201d]">
-                GET /api/v1/pastes/:id.json
-              </span>
-              <span className="ml-auto text-[10px] text-[#74786f] hidden md:inline shrink-0">
-                Fetchable as .json, .yaml, .txt
-              </span>
-            </div>
           )}
 
           <div className="editor-footer">
             <span>{stats}</span>
-            <div className="flex items-center gap-3">
-              {draftStatus === 'saving' && (
-                <span className="text-xs font-mono text-amber-400 flex items-center gap-1.5" title="Saving draft...">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                  Saving draft...
-                </span>
-              )}
-              {draftStatus === 'saved' && (
-                <span className="text-xs font-mono text-[#8c9690] flex items-center gap-1" title="Draft saved locally">
-                  <Icon name="check" size={11} className="text-emerald-400" />
-                  Draft saved
-                </span>
-              )}
-              {draftStatus === 'failed' && (
-                <span className="text-xs font-mono text-red-400" title="Draft save failed">
-                  Draft save failed
-                </span>
-              )}
-              <div className="flex items-center gap-1.5">
-                <span className={`status-dot ${enableE2E ? '!bg-[#c6f05b]' : ''}`}></span>
-                <span className={enableE2E ? 'text-[#c6f05b] font-semibold' : ''}>
-                  {saved
-                    ? `${privacy === 'PUBLIC' ? 'Public' : privacy === 'PRIVATE' ? 'Private' : 'Unlisted'} Paste Created`
-                    : enableE2E
-                      ? 'Sealed · AES-256-GCM'
-                      : activeByteLength > MAX_HIGHLIGHT_BYTES
-                        ? 'Plain Text (Large File)'
-                        : 'Open · Syntax Active'}
-                </span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -1330,7 +1429,10 @@ export const CreatePastePage: React.FC = () => {
                     : 'Requires signing in.'
                   : 'Anyone with the link can open it.'}
               </div>
-              <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' }}>
+              <div
+                aria-hidden="true"
+                style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', visibility: 'hidden' }}
+              >
                 <Select<Visibility>
                   id="paste-exposure"
                   name="visibility"
@@ -1374,7 +1476,10 @@ export const CreatePastePage: React.FC = () => {
                 </label>
 
                 {/* Compatibility toggle for automated suites */}
-                <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' }}>
+                <div
+                  aria-hidden="true"
+                  style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', visibility: 'hidden' }}
+                >
                   <label htmlFor="e2e-encryption-toggle">
                     <input
                       id="e2e-encryption-toggle"
@@ -1633,15 +1738,7 @@ export const CreatePastePage: React.FC = () => {
               }}
             >
               <div className={`file-badge ${paste.color}`}>
-                <Icon
-                  name={
-                    index === 1
-                      ? ('settings' as IconName)
-                      : index === 2
-                        ? ('file' as IconName)
-                        : ('code' as IconName)
-                  }
-                />
+                <TechnologyIcon language={paste.language} size={18} />
               </div>
               <div className="paste-meta">
                 {paste.language} · {paste.age}
@@ -1784,144 +1881,58 @@ export const CreatePastePage: React.FC = () => {
       {/* Frequently Asked Questions */}
       <section
         data-testid="editor-faq"
-        className="mb-12 rounded-2xl border-2 border-[#17201d] bg-[#faf8f2] p-6 shadow-[4px_4px_0px_#17201d]"
+        className="mb-12 rounded-2xl border-2 border-[#17201d] bg-[#faf8f2] p-5 sm:p-7 shadow-[4px_4px_0px_#17201d]"
       >
-        <div className="eyebrow flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-[#74786f] mb-1.5">
-          <span>FREQUENTLY ASKED QUESTIONS</span>
-        </div>
-        <h2 className="text-xl font-mono font-bold text-[#17201d] mb-4">
-          Common Questions &amp; Workflows
-        </h2>
-
-        {/* Feature Overview Strip for discoverability */}
-        <div className="mb-4">
-          <details className="rounded-xl border border-[#d5d0c5] bg-[#ebe7dc]/50 text-xs font-mono text-[#525a54] transition-all group p-1" open={false}>
-            <summary className="px-3.5 py-2 font-bold text-[#17201d] cursor-pointer hover:text-[#ff5c3d] select-none flex items-center justify-between">
-              <span>What can I do?</span>
-              <span className="text-[10.5px] text-[#74786f] font-normal group-open:hidden">Explore platform guides</span>
-            </summary>
-            <div className="px-3.5 pb-2.5 pt-1 border-t border-[#d5d0c5]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-                <span>• Encrypted pastes: Encrypt files in your browser so the server cannot read your text.</span>
-                <span>• Paste as API: Fetch any unencrypted paste as .json, .yaml, or raw text with ETag caching.</span>
-              </div>
-              <Link to="/docs" className="text-[#ff5c3d] font-bold hover:underline shrink-0">
-                Feature guides →
-              </Link>
-            </div>
-          </details>
+        <div className="mb-5">
+          <div className="eyebrow flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-[#74786f] mb-1">
+            <span>FREQUENTLY ASKED QUESTIONS</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-mono font-bold text-[#17201d] m-0">
+            Common Questions &amp; Workflows
+          </h2>
         </div>
 
-        <div className="space-y-3">
-          {/* Question 1 */}
-          <details className="rounded-xl border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#525a54] transition-all group p-1" open={false}>
-            <summary className="px-3.5 py-2.5 font-bold text-[#17201d] cursor-pointer hover:text-[#ff5c3d] select-none flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 flex-1 pr-2">
-                <span>Should I encrypt this paste?</span>
-                <span className="text-[11px] font-normal text-[#74786f]">— How do I protect sensitive text &amp; API keys?</span>
-              </div>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#e8e4da] text-[#17201d] text-sm font-bold shrink-0 transition-transform">
-                <span className="group-open:hidden">+</span>
-                <span className="hidden group-open:inline">−</span>
-              </span>
-            </summary>
-            <div className="px-3.5 pb-3 pt-1.5 border-t border-[#d5d0c5]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <span className="leading-relaxed text-[#2f3833]">
-                Encrypt if your paste contains secrets, credentials, API keys, or private notes so ExtraBin servers never see your plaintext.
-              </span>
-              <Link to="/docs/features/encrypted-pastes#when-to-use" className="text-[#ff5c3d] font-bold hover:underline shrink-0">
-                Read more →
-              </Link>
-            </div>
-          </details>
+        {/* 19 FAQ Accordion Items */}
+        <div className="space-y-2.5">
+          {RECOMMENDED_FAQS.map((item) => {
+            const isOpen = !!openFaqIds[item.id];
+            return (
+              <div
+                key={item.id}
+                className={`rounded-xl border transition-all duration-200 ${
+                  isOpen
+                    ? 'border-[#17201d] bg-[#ffffff] shadow-[3px_3px_0px_#17201d]'
+                    : 'border-[#d5d0c5] bg-[#faf8f2] hover:border-[#17201d]/60 hover:bg-[#f6f2e9]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleFaq(item.id)}
+                  aria-expanded={isOpen}
+                  className="w-full text-left px-4 py-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
+                >
+                  <span className="font-mono text-xs sm:text-sm font-bold text-[#17201d] leading-snug flex-1">
+                    {item.question}
+                  </span>
+                  <span
+                    className={`inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold shrink-0 transition-transform duration-200 border ${
+                      isOpen
+                        ? 'bg-[#17201d] text-[#ffffff] border-[#17201d] rotate-180'
+                        : 'bg-[#ebe7dc] text-[#17201d] border-[#d5d0c5]'
+                    }`}
+                  >
+                    <Icon name="chevron-down" size={13} />
+                  </span>
+                </button>
 
-          {/* Question 2 */}
-          <details className="rounded-xl border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#525a54] transition-all group p-1" open={false}>
-            <summary className="px-3.5 py-2.5 font-bold text-[#17201d] cursor-pointer hover:text-[#ff5c3d] select-none flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 flex-1 pr-2">
-                <span>What happens if I lose the link or passphrase?</span>
-                <span className="text-[11px] font-normal text-[#74786f]">— Can an admin reset or recover it?</span>
+                {isOpen && (
+                  <div className="px-4 pb-4 pt-1 border-t border-[#ebe7dc] font-mono text-xs text-[#2f3833] leading-relaxed animate-fadeIn">
+                    <p className="m-0 text-[#2f3833]">{item.answer}</p>
+                  </div>
+                )}
               </div>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#e8e4da] text-[#17201d] text-sm font-bold shrink-0 transition-transform">
-                <span className="group-open:hidden">+</span>
-                <span className="hidden group-open:inline">−</span>
-              </span>
-            </summary>
-            <div className="px-3.5 pb-3 pt-1.5 border-t border-[#d5d0c5]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <span className="leading-relaxed text-[#2f3833]">
-                If you lose the link key or forget the passphrase, the paste cannot be recovered by anyone, including ExtraBin administrators; the data is permanently lost.
-              </span>
-              <Link to="/docs/features/encrypted-pastes#irreversible-data-loss-policy" className="text-[#ff5c3d] font-bold hover:underline shrink-0">
-                Read more →
-              </Link>
-            </div>
-          </details>
-
-          {/* Question 3 */}
-          <details className="rounded-xl border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#525a54] transition-all group p-1" open={false}>
-            <summary className="px-3.5 py-2.5 font-bold text-[#17201d] cursor-pointer hover:text-[#ff5c3d] select-none flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 flex-1 pr-2">
-                <span>Can I fetch this paste from a script?</span>
-                <span className="text-[11px] font-normal text-[#74786f]">— Using curl, wget, or automated pipelines</span>
-              </div>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#e8e4da] text-[#17201d] text-sm font-bold shrink-0 transition-transform">
-                <span className="group-open:hidden">+</span>
-                <span className="hidden group-open:inline">−</span>
-              </span>
-            </summary>
-            <div className="px-3.5 pb-3 pt-1.5 border-t border-[#d5d0c5]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <span className="leading-relaxed text-[#2f3833]">
-                Yes, unencrypted pastes can be fetched directly using curl, wget, or code with typed suffixes like .json, .yaml, or raw text with ETags.
-              </span>
-              <Link to="/docs/features/paste-as-api#developer-use-cases" className="text-[#ff5c3d] font-bold hover:underline shrink-0">
-                Read more →
-              </Link>
-            </div>
-          </details>
-
-          {/* Question 4 */}
-          <details className="rounded-xl border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#525a54] transition-all group p-1" open={false}>
-            <summary className="px-3.5 py-2.5 font-bold text-[#17201d] cursor-pointer hover:text-[#ff5c3d] select-none flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 flex-1 pr-2">
-                <span>What does burn-after-reading do?</span>
-                <span className="text-[11px] font-normal text-[#74786f]">— Self-destructing one-time view links</span>
-              </div>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#e8e4da] text-[#17201d] text-sm font-bold shrink-0 transition-transform">
-                <span className="group-open:hidden">+</span>
-                <span className="hidden group-open:inline">−</span>
-              </span>
-            </summary>
-            <div className="px-3.5 pb-3 pt-1.5 border-t border-[#d5d0c5]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <span className="leading-relaxed text-[#2f3833]">
-                The paste is permanently destroyed and purged from storage immediately after its first retrieval, returning 404 for any subsequent attempt.
-              </span>
-              <Link to="/docs/features/burn-after-read#mechanics" className="text-[#ff5c3d] font-bold hover:underline shrink-0">
-                Read more →
-              </Link>
-            </div>
-          </details>
-
-          {/* Question 5 */}
-          <details className="rounded-xl border border-[#d5d0c5] bg-[#faf8f2] text-xs font-mono text-[#525a54] transition-all group p-1" open={false}>
-            <summary className="px-3.5 py-2.5 font-bold text-[#17201d] cursor-pointer hover:text-[#ff5c3d] select-none flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 flex-1 pr-2">
-                <span>Is this paste public?</span>
-                <span className="text-[11px] font-normal text-[#74786f]">— Privacy modes: Public vs Unlisted vs Private</span>
-              </div>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#e8e4da] text-[#17201d] text-sm font-bold shrink-0 transition-transform">
-                <span className="group-open:hidden">+</span>
-                <span className="hidden group-open:inline">−</span>
-              </span>
-            </summary>
-            <div className="px-3.5 pb-3 pt-1.5 border-t border-[#d5d0c5]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <span className="leading-relaxed text-[#2f3833]">
-                Public pastes appear in community discovery, unlisted pastes are only accessible to those with the direct link, and private pastes require an account.
-              </span>
-              <Link to="/docs/features/encrypted-pastes#access-modes" className="text-[#ff5c3d] font-bold hover:underline shrink-0">
-                Read more →
-              </Link>
-            </div>
-          </details>
+            );
+          })}
         </div>
       </section>
 

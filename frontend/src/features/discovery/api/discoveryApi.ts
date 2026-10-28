@@ -17,10 +17,12 @@ export interface PublicTag {
   pasteCount: number;
 }
 
+export const DISCOVERY_PAGE_SIZE = 8;
+
 export const discoveryApi = {
   async getDiscovery(
     page = 0,
-    size = 18,
+    size = DISCOVERY_PAGE_SIZE,
     filters: DiscoveryFilters = {},
     signal?: AbortSignal
   ): Promise<PagedResponse<PasteSummary>> {
@@ -44,7 +46,7 @@ export const discoveryApi = {
 
   async getMostSaved(
     page = 0,
-    size = 18,
+    size = DISCOVERY_PAGE_SIZE,
     language?: string,
     signal?: AbortSignal
   ): Promise<PagedResponse<PasteSummary>> {
@@ -59,7 +61,7 @@ export const discoveryApi = {
 
   async getTrending(
     page = 0,
-    size = 18,
+    size = DISCOVERY_PAGE_SIZE,
     window: '24h' | '7d' | '30d' = '24h',
     language?: string,
     signal?: AbortSignal

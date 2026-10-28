@@ -1,12 +1,13 @@
 import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
-import { Loading } from '../components/ui/Loading';
+import { EmbedSkeleton } from '../components/ui/SkeletonLayouts';
 
 // Placeholder views for baseline routing
 const HomePage = React.lazy(() => import('../features/pastes/pages/CreatePastePage'));
 const ViewPastePage = React.lazy(() => import('../features/pastes/pages/ViewPastePage'));
 const DiscoveryPage = React.lazy(() => import('../features/discovery/pages/DiscoveryPage'));
+const DeveloperDiscoveryPage = React.lazy(() => import('../features/discovery/pages/DeveloperDiscoveryPage'));
 const LoginPage = React.lazy(() => import('../features/auth/pages/LoginPage'));
 const RegisterPage = React.lazy(() => import('../features/auth/pages/RegisterPage'));
 const AuthCallbackPage = React.lazy(() => import('../features/auth/pages/AuthCallbackPage'));
@@ -16,6 +17,8 @@ const SettingsPage = React.lazy(() => import('../features/dashboard/pages/Settin
 const EmbedPastePage = React.lazy(() => import('../features/pastes/pages/EmbedPastePage'));
 const DocsPage = React.lazy(() => import('../features/docs/pages/DocsPage'));
 const PublicAuthorProfilePage = React.lazy(() => import('../features/authors/pages/PublicAuthorProfilePage'));
+const DeveloperNetworkPage = React.lazy(() => import('../features/authors/pages/DeveloperNetworkPage'));
+const FollowingFeedPage = React.lazy(() => import('../features/authors/pages/FollowingFeedPage'));
 
 const NotFoundPage = () => (
   <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
@@ -29,7 +32,7 @@ export const router = createBrowserRouter(
     {
       path: '/embed/:id',
       element: (
-        <React.Suspense fallback={<Loading variant="inline" message="Loading embed..." className="p-4" />}>
+        <React.Suspense fallback={<EmbedSkeleton />}>
           <EmbedPastePage />
         </React.Suspense>
       ),
@@ -42,7 +45,11 @@ export const router = createBrowserRouter(
         { path: 'p/:id', element: <ViewPastePage /> },
         { path: 'p/:id/file/:fileId', element: <ViewPastePage /> },
         { path: 'discovery', element: <DiscoveryPage /> },
+        { path: 'developers', element: <DeveloperDiscoveryPage /> },
         { path: 'users/:username', element: <PublicAuthorProfilePage /> },
+        { path: 'users/:username/followers', element: <DeveloperNetworkPage kind="followers" /> },
+        { path: 'users/:username/following', element: <DeveloperNetworkPage kind="following" /> },
+        { path: 'following', element: <FollowingFeedPage /> },
         { path: 'docs', element: <DocsPage /> },
         { path: 'docs/features', element: <DocsPage /> },
         { path: 'docs/features/:featureId', element: <DocsPage /> },

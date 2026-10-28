@@ -29,15 +29,21 @@ public class PasteCommentService {
     private final PasteCommentRepository pasteCommentRepository;
     private final RateLimiterService rateLimiterService;
     private final PasteService pasteService;
+    private final com.pastebin.discovery.application.PasteActivityIngestionService activity;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public PasteCommentService(PasteRepository pasteRepository,
                                PasteCommentRepository pasteCommentRepository,
                                RateLimiterService rateLimiterService,
-                               PasteService pasteService) {
+                               PasteService pasteService,
+                               com.pastebin.discovery.application.PasteActivityIngestionService activity,
+                               org.springframework.context.ApplicationEventPublisher events) {
         this.pasteRepository = pasteRepository;
         this.pasteCommentRepository = pasteCommentRepository;
         this.rateLimiterService = rateLimiterService;
         this.pasteService = pasteService;
+        this.activity = activity;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -156,6 +162,7 @@ public class PasteCommentService {
 
         PasteComment comment = new PasteComment(paste, userId, authorName, trimmedContent, deletionCapabilityHash);
         PasteComment saved = pasteCommentRepository.save(comment);
+        activity.recordCommentEvent(saved);
 
         boolean isPasteAuthor = userId != null && userId.equals(paste.getUserId());
         boolean isAuthenticatedUser = userId != null;
@@ -215,5 +222,6 @@ public class PasteCommentService {
         }
 
         pasteCommentRepository.delete(comment);
+        events.publishEvent(new PublicListingChangedEvent());
     }
 }

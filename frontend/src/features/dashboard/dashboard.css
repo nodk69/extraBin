@@ -1,0 +1,272 @@
+/* -------------------------------------------------------------------------
+   ExtraBin Developer Workspace / Account Dashboard Styles
+   ------------------------------------------------------------------------- */
+
+.account-workspace {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-bottom: 4rem;
+}
+
+/* Header & Profile Hero */
+.account-hero-card {
+  background: #faf8f2;
+  border: 2px solid var(--ink, #17201d);
+  border-radius: 16px;
+  box-shadow: 4px 5px 0px var(--ink, #17201d);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.account-hero-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #d5d0c5;
+}
+
+.account-hero-user {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.account-hero-meta {
+  min-width: 0;
+}
+
+.account-hero-username {
+  font-family: IBM Plex Mono, monospace;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--ink, #17201d);
+  letter-spacing: -0.02em;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.account-hero-email {
+  font-family: IBM Plex Mono, monospace;
+  font-size: 0.75rem;
+  color: #74786f;
+  margin: 0.15rem 0 0 0;
+  overflow-wrap: anywhere;
+}
+
+.account-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* 4-Stat Workspace Grid */
+.account-stats-container {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 840px) {
+  .account-stats-container {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .account-stats-container {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+}
+
+.account-stat-tile {
+  background: #ffffff;
+  border: 1px solid #d5d0c5;
+  border-radius: 12px;
+  padding: 0.875rem 1rem;
+  box-shadow: 2px 2px 0px #d5d0c5;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.15s ease;
+}
+
+.account-stat-tile:hover {
+  border-color: var(--ink, #17201d);
+  box-shadow: 3px 3px 0px var(--ink, #17201d);
+  transform: translate(-1px, -1px);
+}
+
+.account-stat-num {
+  font-family: IBM Plex Mono, monospace;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--ink, #17201d);
+  line-height: 1.1;
+}
+
+.account-stat-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #74786f;
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Navigation Tabs */
+.account-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+  scrollbar-width: thin;
+}
+
+.account-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 2px solid #d5d0c5;
+  background: #ffffff;
+  font-family: IBM Plex Mono, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #74786f;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.account-nav-tab:hover {
+  border-color: var(--ink, #17201d);
+  color: var(--ink, #17201d);
+}
+
+.account-nav-tab.active {
+  background: var(--ink, #17201d);
+  color: #ffffff;
+  border-color: var(--ink, #17201d);
+  box-shadow: 3px 3px 0px var(--coral, #ff5c3d);
+}
+
+/* Folders Toolbar */
+.account-folder-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #faf8f2;
+  border: 2px solid var(--ink, #17201d);
+  border-radius: 12px;
+  box-shadow: 3px 3px 0px var(--ink, #17201d);
+  margin-bottom: 1.25rem;
+}
+
+.account-folder-list {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: thin;
+  padding: 0.15rem 0;
+}
+
+/* Mobile-Friendly Paste Cards (Grid on mobile, hidden on desktop table) */
+.account-mobile-cards {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .account-desktop-table {
+    display: none !important;
+  }
+
+  .account-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+.account-paste-card {
+  background: #ffffff;
+  border: 1px solid #d5d0c5;
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 2px 2px 0px #d5d0c5;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.account-paste-card:hover {
+  border-color: var(--ink, #17201d);
+  box-shadow: 3px 3px 0px var(--ink, #17201d);
+}
+
+.account-paste-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.account-paste-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink, #17201d);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.account-paste-card-title:hover {
+  color: var(--coral, #ff5c3d);
+}
+
+.account-paste-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-family: IBM Plex Mono, monospace;
+  font-size: 0.7rem;
+  color: #74786f;
+}
+
+.account-paste-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e8e4da;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.account-paste-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}

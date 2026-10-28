@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase/client';
 import { authApi } from '../api/authApi';
-import { LoginPayload, RegisterPayload, UserResponse } from '../types/auth';
+import { LoginPayload, RegisterPayload, UpdateProfilePayload, UserResponse } from '../types/auth';
 
 interface AuthContextType {
   user: UserResponse | null;
@@ -13,6 +13,7 @@ interface AuthContextType {
   loginWithMagicLink: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateProfile: (payload: UpdateProfilePayload) => Promise<UserResponse>;
   syncSessionWithBackend: (accessToken: string, email: string, username?: string, avatarUrl?: string | null) => Promise<UserResponse | null>;
 }
 
@@ -32,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         username,
       });
-      if (syncedUser && avatarUrl) {
+      if (syncedUser && avatarUrl && !syncedUser.avatarUrl) {
         syncedUser.avatarUrl = avatarUrl;
       }
       setUser(syncedUser);
@@ -41,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Failed to sync Supabase session with backend:', err);
       try {
         const currentUser = await authApi.getCurrentUser();
-        if (currentUser && avatarUrl) {
+        if (currentUser && avatarUrl && !currentUser.avatarUrl) {
           currentUser.avatarUrl = avatarUrl;
         }
         setUser(currentUser);
@@ -215,6 +216,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const updateProfile = useCallback(async (payload: UpdateProfilePayload) => {
+    const updated = await authApi.updateProfile(payload);
+    setUser(updated);
+    return updated;
+  }, []);
+
   const logout = async () => {
     try {
       await supabase.auth.signOut();
@@ -243,6 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithMagicLink,
         logout,
         refreshUser,
+        updateProfile,
         syncSessionWithBackend,
       }}
     >

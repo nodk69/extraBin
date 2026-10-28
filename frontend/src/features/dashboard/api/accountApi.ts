@@ -45,6 +45,17 @@ export interface EditPastePayload {
   files?: EditPasteFileItemPayload[];
 }
 
+export interface PasteRevisionFile {
+  id?: number;
+  filename: string;
+  content: string;
+  language: string;
+  sizeBytes?: number;
+  lineCount?: number;
+  sortOrder?: number;
+  isPrimary?: boolean;
+}
+
 export interface PasteRevision {
   id: number;
   version: number;
@@ -52,11 +63,21 @@ export interface PasteRevision {
   content: string;
   language: string;
   createdAt: string;
+  files?: PasteRevisionFile[];
 }
 
 export interface TagItem {
   id: number;
   name: string;
+}
+
+export interface AccountStats {
+  totalPastes: number;
+  publicCount: number;
+  unlistedCount: number;
+  privateCount: number;
+  totalLines: number;
+  totalViews: number;
 }
 
 export const accountApi = {
@@ -68,11 +89,17 @@ export const accountApi = {
     search?: string,
     tag?: string,
     sort?: string,
-    direction?: string
+    direction?: string,
+    visibility?: string
   ): Promise<PagedResponse<PasteSummary>> {
     const response = await apiClient.get<PagedResponse<PasteSummary>>('/account/pastes', {
-      params: { page, size, folderId, unfiled, search, tag, sort, direction },
+      params: { page, size, folderId, unfiled, search, tag, sort, direction, visibility },
     });
+    return response.data;
+  },
+
+  async getStats(): Promise<AccountStats> {
+    const response = await apiClient.get<AccountStats>('/account/stats');
     return response.data;
   },
 
@@ -87,6 +114,11 @@ export const accountApi = {
 
   async getRevisions(id: string): Promise<PasteRevision[]> {
     const response = await apiClient.get<PasteRevision[]>(`/account/pastes/${id}/revisions`);
+    return response.data;
+  },
+
+  async restoreRevision(id: string, version: number) {
+    const response = await apiClient.post(`/account/pastes/${id}/revisions/${version}/restore`);
     return response.data;
   },
 

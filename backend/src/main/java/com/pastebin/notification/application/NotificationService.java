@@ -85,6 +85,13 @@ public class NotificationService {
         }
     }
 
+    @Transactional
+    public void notifyNewFollower(User recipient, Long actorId) {
+        if (recipient == null || actorId == null || recipient.getId().equals(actorId) || !recipient.isNotifyOnFollows()) return;
+        userRepository.findById(actorId).ifPresent(actor -> notificationRepository.save(
+                new Notification(recipient, actor, null, null, "NEW_FOLLOWER", actor.getUsername() + " started following you.")));
+    }
+
     @Transactional(readOnly = true)
     public List<NotificationResponse> getNotifications(Long userId, int limit) {
         if (userId == null) {
@@ -97,13 +104,18 @@ public class NotificationService {
                         n.getId(),
                         n.getType(),
                         n.getMessage(),
-                        n.getPaste().getPublicId(),
+                        n.getPaste() != null ? n.getPaste().getPublicId() : null,
                         n.getReply() != null ? n.getReply().getId() : null,
                         n.getActor() != null ? n.getActor().getUsername() : "Anonymous",
                         n.isRead(),
                         n.getCreatedAt()
                 ))
                 .toList();
+    }
+
+    @Transactional
+    public boolean markAsRead(Long userId, Long notificationId) {
+        return notificationRepository.markAsRead(notificationId, userId, Instant.now()) > 0;
     }
 
     @Transactional(readOnly = true)

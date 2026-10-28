@@ -1,233 +1,772 @@
 /* ==========================================================================
-   ExtraBin Design System — Centralized Responsive Layout Policy
-   Contains content-fit media queries for layout stacking, navigation clearance,
-   editor header adaptability, and panel positioning.
-   Loaded after index.css to govern responsive transitions without !important.
+   ExtraBin — Central responsive policy
+   --------------------------------------------------------------------------
+   Loaded once from src/main.tsx, immediately after styles/index.css:
+
+     import './styles/index.css';
+     import './styles/responsive.css';
+
+   This file is the ONLY place application-wide responsive policy lives.
+   Feature stylesheets may add a local exception, but they must build on the
+   tokens in tokens.css and the breakpoints documented there.
+
+   BREAKPOINTS (px, mobile-first min-width unless stated)
+     480  compact phones end
+     640  Tailwind sm — large phones / small tablets
+     768  Tailwind md — tablet portrait, mobile shell ends here
+     1024 Tailwind lg — desktop
+     1280 Tailwind xl — wide desktop
+     960  content-driven workbench transition (editor needs >= 560px)
+
+   Rules here override the component layer in index.css because that layer is
+   hoisted by Tailwind *before* its utilities, while this file is loaded after
+   them. Keeping the override in one place is what stops the old cascade
+   fights between index.css, responsive.css and feature CSS.
    ========================================================================== */
 
 /* -------------------------------------------------------------------------
-   1. Global Container & Safe-Area Clearances
+   1. Layout primitives & safeguards
    ------------------------------------------------------------------------- */
 
-/* On viewports with mobile bottom navigation active (≤768px),
-   provide dynamic bottom clearance that accounts for bar height and safe area */
-@media (max-width: 768px) {
-  .workspace {
-    padding-bottom: var(--mobile-nav-clearance) !important;
-  }
-}
-
-/* -------------------------------------------------------------------------
-   2. Workbench Split & Settings Panel Flow
-   ------------------------------------------------------------------------- */
-
-/* When the workbench collapses from 2-column to 1-column stack (≤980px),
-   revert .ref-panel from position: sticky to static document flow so it
-   does not hover or overlap content mid-scroll. */
-@media (max-width: 980px) {
-  .ref-panel {
-    position: static;
-    top: auto;
-    margin-top: 18px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-}
-
-/* -------------------------------------------------------------------------
-   3. Workbench Editor Header, Multi-File Tabs & Editor Shell Responsiveness
-   ------------------------------------------------------------------------- */
-
-/* On mobile / narrow screens (≤768px), expand the editor height so code is prominent
-   rather than being squeezed into a tiny window, and provide clear scrolling boundaries. */
-@media (max-width: 768px) {
-  .editor-shell {
-    height: clamp(480px, 68vh, 680px) !important;
-    min-height: 440px !important;
-    max-height: 80vh !important;
-  }
-
-  .code-editor-surface {
-    grid-template-columns: 42px 1fr !important;
-  }
-
-  .code-editor-gutter {
-    padding: 12px 0 !important;
-  }
-
-  .code-editor-gutter span {
-    font-size: 11px !important;
-    padding-right: 8px !important;
-    padding-left: 2px !important;
-  }
-}
-
-/* When available width drops below ~600px, adapt the editor header and multi-file tab strip
-   so the title, language selector, copy button, file tabs, and upload actions are clean,
-   generously proportioned, and user-friendly without cramped overlap. */
-@media (max-width: 600px) {
-  .ref-e-head {
-    flex-wrap: wrap !important;
-    gap: 10px !important;
-    padding: 10px 12px !important;
-  }
-
-  .ref-e-head input.title {
-    flex: 1 1 100% !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    font-size: 15px !important;
-    order: 1 !important;
-    padding: 4px 0 !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  }
-
-  .ref-e-head input.title:focus {
-    max-width: 100% !important;
-    border-bottom-color: var(--acid, #c6f05b) !important;
-  }
-
-  .ref-e-head .ref-e-actions,
-  .ref-e-head > .flex.items-center {
-    flex: 1 1 100% !important;
-    width: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 8px !important;
-    order: 2 !important;
-  }
-
-  .ref-e-head .editor-type {
-    flex: 1 1 auto !important;
-    min-width: 0 !important;
-  }
-
-  .ref-e-head .editor-type .pp-sel {
-    width: 100% !important;
-  }
-
-  .ref-e-head .editor-type .pp-sel__trigger {
-    width: 100% !important;
-    justify-content: space-between !important;
-  }
-
-  .ref-e-head .ref-ghost-btn {
-    flex-shrink: 0 !important;
-    padding: 6px 12px !important;
-    font-size: 12px !important;
-  }
-
-  /* Multi-File Tab Strip responsive touch improvements */
-  .ref-tabs {
-    padding: 6px 8px 0 !important;
-    gap: 6px !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: thin !important;
-  }
-
-  .ref-tabs::-webkit-scrollbar {
-    height: 4px !important;
-  }
-
-  .ref-tabs::-webkit-scrollbar-thumb {
-    background: #3d4a43 !important;
-    border-radius: 4px !important;
-  }
-
-  .ref-tab {
-    padding: 6px 10px !important;
-    font-size: 12px !important;
-    flex-shrink: 0 !important;
-  }
-
-  .ref-tab input {
-    width: 90px !important;
-    font-size: 12px !important;
-  }
-
-  .ref-addtab {
-    padding: 5px 9px !important;
-    font-size: 11px !important;
-    flex-shrink: 0 !important;
-    white-space: nowrap !important;
-  }
-}
-
-/* -------------------------------------------------------------------------
-   4. iOS Input Auto-Zoom Guard for Compact Screens (≤640px)
-   ------------------------------------------------------------------------- */
-
-/* Prevents iOS Safari from unexpectedly zooming the viewport when focusing text inputs */
-@media (max-width: 640px) {
-  .ref-in,
-  .ref-pw input {
-    font-size: var(--font-size-input-compact);
-  }
-}
-
-/* -------------------------------------------------------------------------
-   5. Localized Table & Code Scrolling
-   ------------------------------------------------------------------------- */
-
-/* Ensures tables and wide preformatted markdown scroll horizontally within
-   their card containers on small screens rather than causing page-level document overflow */
-.account-table-card,
-.account-table-wrapper,
-.markdown-body pre,
-.prose pre {
+/* Horizontal overflow that is intentional stays inside the component. */
+.u-scroll-x {
   max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
 }
 
-/* -------------------------------------------------------------------------
-   6. ViewPaste Action Toolbar Wrapping & Interactive Dimensions
-   ------------------------------------------------------------------------- */
+/* Flex/grid children that contain code, URLs or long titles may shrink. */
+.u-shrinkable {
+  min-width: 0;
+}
 
-/* On compact screens (≤640px), ensure the action toolbar wraps predictably
-   with a real interactive height (min-height: 40px) and sufficient tap area
-   without pseudo-element hit-target overlap risks. */
-@media (max-width: 640px) {
-  .workspace .action-btn {
-    min-height: 40px;
-    padding: 6px 13px;
-    font-size: 12px;
-    gap: 6px;
-    white-space: nowrap;
+/* Unbroken, untrusted strings (URLs, hashes, filenames) wrap instead of
+   stretching their parent. Apply where the text is not code. */
+.u-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Responsive card collection: intrinsic columns, no fixed count. */
+.u-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr));
+  gap: var(--grid-gap);
+}
+
+.u-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Shared form grid: two columns only where there is room for them. */
+.u-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3) var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .u-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 /* -------------------------------------------------------------------------
-   7. Mobile Navigation & Dropdown Alignment (≤768px)
+   2. Application shell & navigation
    ------------------------------------------------------------------------- */
 
-@media (max-width: 768px) {
-  /* Ensure topbar aligns brand mark to the far left and auth/menu to the far right */
+.topbar-left,
+.topbar-right {
+  min-width: 0;
+}
+
+.wordmark {
+  font-size: clamp(1.15rem, 1rem + 0.5vw, 1.5rem);
+  white-space: nowrap;
+}
+
+.topbar-nav {
+  min-width: 0;
+}
+
+@media (max-width: 1023.98px) {
+  .topbar-link {
+    min-width: 0;
+    padding-inline: 0.75rem;
+  }
+}
+
+@media (max-width: 767.98px) {
   .topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
+    gap: var(--space-3);
+    height: var(--topbar-height-mobile);
+    padding-inline: max(var(--page-gutter), var(--safe-left));
   }
 
-  .topbar-left {
-    flex: 0 0 auto;
+  .topbar-nav {
+    display: none;
   }
 
   .topbar-right {
-    flex: 0 0 auto;
     justify-content: flex-end;
   }
 
-  /* User dropdown & mobile menu card anchor cleanly to the right */
-  .mobile-auth-menu [role="menu"],
-  #user-account-menu {
-    right: 0 !important;
-    left: auto !important;
-    max-width: calc(100vw - 24px);
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: var(--z-bottom-nav);
+    align-items: stretch;
+    justify-content: space-around;
+    min-height: var(--bottom-nav-height);
+    padding-bottom: var(--safe-bottom);
+    background: rgba(247, 245, 239, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--ink);
+    box-shadow: 0 -4px 16px rgba(23, 32, 29, 0.08);
+  }
+
+  .mobile-nav-item {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 48px;
+    padding: 4px;
+    color: #74786f;
+    text-decoration: none;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s ease, transform 0.15s ease;
+  }
+
+  .mobile-nav-item:hover,
+  .mobile-nav-item:active,
+  .mobile-nav-item.active {
+    color: var(--ink);
+  }
+
+  .mobile-nav-item.active {
+    font-weight: 700;
+  }
+
+  .mobile-nav-item.active svg {
+    color: var(--coral);
+  }
+
+  /* One clearance definition for every page under the mobile shell. The
+     horizontal gutter and max width stay owned by the base container rule. */
+  .workspace {
+    padding-bottom: var(--mobile-nav-clearance);
+  }
+
+  .site-footer {
+    padding-bottom: calc(var(--mobile-nav-clearance) + var(--space-4));
+    margin-top: var(--section-gap);
   }
 }
 
+@media (max-width: 479.98px) {
+  .wordmark {
+    font-size: 1.125rem;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   3. Workbench: editor + settings panel
+   ------------------------------------------------------------------------- */
+
+/* Below 960px the editor would be narrower than ~560px, so the two-column
+   workbench stops working and stacks. Everything flows in document order. */
+@media (max-width: 959.98px) {
+  .workbench-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--layout-gap);
+  }
+
+  .controls-panel,
+  .ref-panel {
+    position: static;
+    top: auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    align-self: stretch;
+  }
+
+  .controls-panel-body {
+    overflow-y: visible;
+    max-height: none;
+    padding-right: 0;
+  }
+}
+
+/* On desktop the panel is only as tall as its content, sticks below the
+   topbar, and scrolls internally only when it exceeds the viewport. The
+   primary action stays pinned to the bottom of the panel. */
+@media (min-width: 960px) {
+  .ref-panel {
+    position: sticky;
+    top: calc(var(--topbar-height) + var(--space-4));
+    max-height: calc(100dvh - var(--topbar-height) - var(--space-8));
+  }
+
+  .controls-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   4. Code editor surfaces (Create + View)
+   ------------------------------------------------------------------------- */
+
+.editor-shell {
+  min-width: 0;
+}
+
+.editor-top > .min-w-0,
+.editor-top > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.title-input,
+.ref-e-head input.title,
+.ref-tab input,
+.editor-filename-input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep code scrolling inside the editor instead of widening the page. */
+.code-editor-surface,
+.code-editor-scroll-area,
+.code-textarea-layer,
+.code-highlight-layer {
+  max-width: 100%;
+}
+
+.editor-file-tabs,
+.ref-tabs {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
+
+@media (max-width: 767.98px) {
+  .editor-shell {
+    height: var(--editor-height-mobile);
+    min-height: 0;
+    max-height: none;
+    border-radius: var(--radius-xl);
+  }
+
+  .code-editor-surface {
+    grid-template-columns: var(--editor-gutter-width-mobile) minmax(0, 1fr);
+  }
+
+  .code-editor-gutter {
+    padding: 12px 0;
+  }
+
+  .code-editor-gutter span,
+  .code-editor-gutter button {
+    padding-right: 8px;
+    padding-left: 2px;
+    font-size: 11px;
+  }
+
+  .code-highlight-layer,
+  pre.code-highlight-layer[class*="language-"] {
+    padding: 12px;
+  }
+
+  .code-highlight-layer code,
+  pre.code-highlight-layer code[class*="language-"] {
+    font-size: var(--editor-font-size);
+    line-height: var(--editor-line-height);
+  }
+
+  .code-textarea-layer {
+    padding: 12px;
+    font-size: var(--editor-font-size);
+    line-height: var(--editor-line-height);
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: auto;
+    touch-action: pan-x pan-y;
+  }
+
+  .code-editor-surface,
+  .code-editor-scroll-area {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+  }
+
+  .editor-top {
+    gap: var(--space-2);
+    padding: 8px 12px;
+  }
+
+  .editor-footer {
+    font-size: 10px;
+    padding: 6px 12px;
+    gap: 2px var(--space-2);
+  }
+
+  .editor-footer > div {
+    margin-left: auto;
+  }
+
+  .editor-file-tabs {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .editor-file-tab,
+  .ref-tab {
+    padding: 5px 9px;
+    font-size: 11.5px;
+  }
+
+  .editor-add-file-btn,
+  .ref-addtab {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+
+  .editor-filename-input {
+    width: 6.5rem;
+  }
+
+  .editor-filename-input:focus {
+    width: 8rem;
+  }
+}
+
+/* Tablets in the stacked workbench get a taller editor than phones but a
+   shorter one than the viewport so the settings panel stays reachable. */
+@media (min-width: 768px) and (max-width: 959.98px) {
+  .editor-shell {
+    height: clamp(360px, 56dvh, 560px);
+  }
+}
+
+/* Short landscape phones: keep the editor usable, let the page scroll. */
+@media (max-height: 520px) and (max-width: 959.98px) {
+  .editor-shell {
+    height: var(--editor-height-landscape);
+  }
+}
+
+@media (max-width: 479.98px) {
+  /* Purely decorative window chrome yields its space to the title. */
+  .editor-top .window-dots {
+    display: none;
+  }
+
+  .title-input {
+    min-width: 0;
+    max-width: none;
+    font-size: 13px;
+    padding-inline: 2px;
+  }
+
+  .editor-top .editor-type {
+    padding: 0;
+  }
+
+  .editor-footer > span {
+    flex: 1 1 100%;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   5. Paste view: header, metadata, details, toolbar, editor chrome
+   ----------------------------------------------------------------------
+   Reference layout (docs/reference/view-paste-responsive.html) recreated
+   with ExtraBin tokens: compact back link, fluid title, one-line meta with
+   a Details disclosure, a grouped toolbar that goes icon-only on phones,
+   and a dark editor whose file picker lives in its title bar below 768px.
+   ------------------------------------------------------------------------- */
+
+.view-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.view-meta-views,
+.view-meta-expiry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.view-meta-views {
+  color: var(--ink);
+}
+
+.view-meta-expiry {
+  color: var(--coral);
+}
+
+.view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* A very long filename must never stretch a button past its row. */
+.view-actions .action-btn {
+  max-width: 100%;
+}
+
+.view-actions .action-btn-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 639.98px) {
+  /* Bullet separators only make sense while the meta row is unbroken. */
+  .view-meta {
+    gap: 4px 12px;
+  }
+
+  .view-meta .meta-sep {
+    display: none;
+  }
+
+  .view-meta > span {
+    white-space: nowrap;
+  }
+
+  /* An expiry date is important enough to own its own line when it wraps. */
+  .view-meta-expiry {
+    width: 100%;
+  }
+}
+
+/* Phones: icon-only toolbar. The primary action keeps its label so the main
+   intent of the page is never ambiguous, and every icon-only control carries
+   an aria-label in the markup. */
+@media (max-width: 767.98px) {
+  .view-actions {
+    gap: 6px;
+  }
+
+  .view-actions .action-btn {
+    min-height: 40px;
+    padding: 6px 11px;
+    gap: 0;
+    font-size: 12px;
+  }
+
+  .view-actions .action-btn .action-btn-label {
+    display: none;
+  }
+
+  .view-actions .action-btn-primary .action-btn-label {
+    display: inline;
+  }
+
+  .view-actions .action-btn-primary {
+    padding: 6px 13px;
+    gap: 6px;
+  }
+
+  /* Tags and API strips stay complete but take less vertical space so the
+     code surface starts within the first screen on a phone. */
+  .paste-strip {
+    margin-bottom: var(--space-2);
+    padding: var(--space-2);
+    gap: var(--space-1) var(--space-2);
+    font-size: 11px;
+  }
+
+  .view-tag-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* On mobile devices, browsers/OS handle back navigation natively; hide back arrow buttons */
+  .view-back {
+    display: none !important;
+  }
+}
+
+/* Tablet and up: identity block left, action toolbar right — the reference's
+   header composition. */
+@media (min-width: 768px) {
+  .view-header {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-6);
+  }
+
+  .view-head-main {
+    flex: 1 1 auto;
+  }
+
+  .view-actions {
+    flex: none;
+    justify-content: flex-end;
+  }
+
+  /* The owner tag editor is a short inline control, not a full-width band. */
+  .paste-strip--compact {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  /* The title-bar file picker belongs to the mobile layout only; the sidebar
+     takes over at this width. */
+  .editor-fsel-wrap {
+    display: none;
+  }
+
+  /* The viewer has no settings panel beside it, so it may claim the height
+     the create workbench spends on its controls panel. */
+  .view-editor {
+    height: var(--view-editor-height);
+  }
+
+  .editor-top {
+    flex-wrap: nowrap;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   6. Account dashboard
+   ------------------------------------------------------------------------- */
+
+.account-tabs,
+.account-filters,
+.account-folder-strip,
+.settings-tabs {
+  scrollbar-gutter: auto;
+}
+
+.account-search {
+  min-width: 0;
+}
+
+@media (max-width: 767.98px) {
+  .account-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-table-card {
+    overflow: hidden;
+  }
+
+  .account-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .account-table {
+    min-width: 640px;
+  }
+
+  .account-table thead th,
+  .account-table tbody td {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .account-stat-box {
+    padding: 10px 12px;
+  }
+
+  .account-stat-value {
+    font-size: 20px;
+  }
+
+  .account-avatar-large {
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   7. Settings workspace
+   ------------------------------------------------------------------------- */
+
+@media (min-width: 768px) {
+  .settings-tabs {
+    align-items: stretch;
+    mask-image: none;
+    -webkit-mask-image: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .paper-card {
+    padding: var(--card-padding-sm);
+  }
+}
+
+@media (max-width: 767.98px) {
+  .settings-tabs {
+    padding-bottom: var(--space-2);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   8. Dialogs
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 479.98px) {
+  .modal-backdrop {
+    align-items: flex-start;
+    padding: var(--space-3);
+    padding-bottom: calc(var(--space-3) + var(--safe-bottom));
+  }
+
+  .modal-paper {
+    max-width: 100%;
+    max-height: calc(100dvh - (2 * var(--space-3)) - var(--safe-top));
+    padding: var(--card-padding-sm);
+    border-width: 1px;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .modal-actions {
+    justify-content: stretch;
+  }
+
+  .modal-actions > * {
+    flex: 1 1 auto;
+    min-height: var(--control-h-lg);
+  }
+}
+
+/* Dialog forms stack before they get too narrow for two columns. */
+@media (max-width: 479.98px) {
+  .modal-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   9. Forms & touch ergonomics
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 767.98px) {
+  /* 16px prevents iOS Safari from zooming the focused field. Scoped to form
+     controls so the code editor keeps its 13px monospace metrics. */
+  .controls-input,
+  .controls-select,
+  .ref-in,
+  .ref-pw input,
+  .discovery-search__input,
+  .account-search input,
+  .modal-paper input:not([type="checkbox"]):not([type="radio"]),
+  .modal-paper select,
+  .modal-paper textarea {
+    font-size: var(--font-size-input-compact);
+  }
+
+  .modal-paper input[type="text"],
+  .modal-paper input[type="password"],
+  .modal-paper input[type="email"] {
+    min-height: var(--control-h-lg);
+  }
+
+  .action-btn,
+  .action-icon-btn,
+  .mobile-auth-menu button,
+  .modal-close {
+    min-height: 40px;
+  }
+
+  .action-icon-btn,
+  .modal-close {
+    min-width: 40px;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .action-btn {
+    min-height: var(--control-h-lg);
+  }
+
+  .controls-panel,
+  .ref-panel {
+    padding: var(--card-padding-sm);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   10. Auth & docs
+   ------------------------------------------------------------------------- */
+
+.auth-card {
+  padding: var(--card-padding);
+}
+
+@media (max-width: 479.98px) {
+  .auth-card {
+    padding: var(--card-padding-sm);
+  }
+
+  .auth-card .create-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.docs-shell {
+  min-width: 0;
+}
+
+/* Long code blocks, tables and URLs inside docs scroll locally. */
+.docs-shell pre,
+.docs-shell table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-nav-item,
+  .action-btn,
+  .editor-file-tab {
+    transition: none;
+  }
+}

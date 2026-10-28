@@ -5,19 +5,19 @@
 *.key
 *.pem
 
-# Documentation (user requested not to push)
-/docs/*
+# Documentation & Reports
+/docs/
+docs/
+frontend/docs/
 *.md
-DECISIONS.md
-CHANGELOG.md
-README.md
-!/docs/features/
-!/docs/features/*.md
-!/docs/README.md
-!/docs/DEMO_MANIFEST.md
+!README.md
 !backend/README.md
 !frontend/README.md
-!frontend/docs/features/*.md
+
+# Tests
+backend/src/test/
+frontend/src/test/
+*-test*
 
 # IDE & Editor
 .vscode/

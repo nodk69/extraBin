@@ -82,12 +82,12 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="qr-modal-title"
     >
-      <div className="w-full max-w-sm rounded-2xl border-2 border-[#17201d] bg-[#faf8f2] p-6 shadow-[8px_10px_0px_#17201d] space-y-4">
+      <div className="modal-paper max-w-sm">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#d5d0c5] pb-3">
           <div className="flex items-center gap-2.5">
@@ -137,7 +137,7 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({
               type="text"
               readOnly
               value={canonicalUrl}
-              className="controls-input text-[11px] font-mono flex-1 py-1.5 px-2 bg-white border border-[#d5d0c5]"
+              className="controls-input min-w-0 flex-1 border border-[#d5d0c5] bg-white py-1.5 px-2 font-mono text-[11px]"
             />
             <button
               type="button"

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Icon } from '../../../components/ui/PaperIcon';
-import { Loading } from '../../../components/ui/Loading';
+import { RevisionHistorySkeleton } from '../../../components/ui/SkeletonLayouts';
 import { accountApi, PasteRevision } from '../../dashboard/api/accountApi';
 
 interface RevisionHistoryModalProps {
@@ -34,12 +34,12 @@ export const RevisionHistoryModal: React.FC<RevisionHistoryModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="modal-backdrop">
       <div 
         role="dialog"
         aria-modal="true"
         aria-labelledby="revision-modal-title"
-        className="w-full max-w-4xl rounded-2xl border-2 border-[#17201d] bg-[#faf8f2] p-6 shadow-[8px_10px_0px_#17201d] space-y-4 max-h-[85vh] flex flex-col"
+        className="modal-paper modal-wide max-w-4xl"
       >
         <div className="flex items-center justify-between pb-3 border-b border-[#d5d0c5] shrink-0">
           <div className="flex items-center gap-2.5 text-[#17201d]">
@@ -61,9 +61,7 @@ export const RevisionHistoryModal: React.FC<RevisionHistoryModalProps> = ({
         </div>
 
         {loading ? (
-          <div className="py-12">
-            <Loading message="Loading revision snapshots..." />
-          </div>
+          <RevisionHistorySkeleton />
         ) : revisions.length === 0 ? (
           <div className="py-16 text-center font-mono text-xs text-[#74786f]">
             No previous revisions recorded for this paste.
